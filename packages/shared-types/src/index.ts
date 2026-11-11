@@ -775,6 +775,100 @@ export interface TripReorganizationImpactDTO {
   recommendationMessage: string;
 }
 
+// =============================================================================
+// FASE 7: ADMINISTRACIÓN Y CONTROL
+// =============================================================================
+
+export type ContentReportStatus =
+  | 'PENDING'
+  | 'IN_REVIEW'
+  | 'RESOLVED'
+  | 'DISMISSED';
+
+export type ModerationActionStatus =
+  | 'APPROVED'
+  | 'FLAGGED'
+  | 'REJECTED'
+  | 'DISPUTED';
+
+export interface AuditLogDTO {
+  id: string;
+  actorUserId: string | null;
+  actorName?: string | null;
+  actorRole?: UserRole;
+  entityType: string;
+  entityId: string;
+  action: string;
+  previousState: unknown;
+  newState: unknown;
+  reason: string;
+  createdAt: string;
+}
+
+export interface ContentReportDTO {
+  id: string;
+  reporterUserId: string | null;
+  reporterName?: string | null;
+  targetType: 'PLACE' | 'USER_REVIEW' | 'EVIDENCE' | 'COMMUNITY_NOTE';
+  targetId: string;
+  reason: string;
+  details: string | null;
+  status: ContentReportStatus;
+  resolutionNotes: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface ProcessingErrorDTO {
+  id: string;
+  sourceCode: string | null;
+  placeId: string | null;
+  errorType: string;
+  errorMessage: string;
+  payload: unknown;
+  isResolved: boolean;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface AiModelConfigDTO {
+  id: string;
+  modelName: string;
+  provider: string;
+  isActive: boolean;
+  parameters: Record<string, unknown>;
+  description: string | null;
+  updatedAt: string;
+}
+
+export interface AdminStatsDTO {
+  totalUsers: number;
+  totalPlaces: number;
+  totalEvidences: number;
+  totalUserReviews: number;
+  totalTrips: number;
+  pendingReportsCount: number;
+  unresolvedErrorsCount: number;
+  activeFeatureFlagsCount: number;
+}
+
+export interface AdminUserDTO {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface AdminFeatureFlagDTO {
+  key: string;
+  enabled: boolean;
+  description: string | null;
+}
+
+
 
 
 

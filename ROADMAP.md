@@ -15,9 +15,9 @@
 | **Fase 3** | Integración de Mapas y Fuentes | ✅ **Completada y Validada (82/82 tests)** | OpenFreeMap / MapLibre GL `$0`, Autocompletado y Geocodificación PostGIS/Redis, Cálculo de Rutas sin costo, Conectores legales de fuentes, Sistema de Evidencias y Deduplicación segura. |
 | **Fase 4** | Motor de Inteligencia y Recomendaciones | ✅ **Completada y Validada (97/97 tests)** | Extracción de aspectos en Python/FastAPI ($0.00), Motor de Ranking determinista + explicable, Guardián anti-alucinaciones, Métricas FinOps de IA. |
 | **Fase 5** | Sistema de Experiencias Propias | ✅ **Completada y Validada (115/115 tests)** | Flujo «Comenzar actividad», cuestionarios cortos adaptados (Restaurantes/Turismo), verificación opcional (GPS/QR), integración inmutable al ranking. |
-| **Fase 6** | Planificador de Viajes (Oculto) | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Protegido por Feature Flag: itinerarios manuales y asistidos, flexibilidad horaria (0/15/30/60m), edición inteligente en 3 niveles, reorganización con confirmación. |
-| **Fase 7** | Administración y Control | ⚪ Pendiente | Panel Admin (`apps/admin`), moderación de evidencias/duplicados, gestión de feature flags y métricas de IA, auditoría inmutable (`audit_logs`). |
-| **Fase 8** | Pruebas, Optimización y Lanzamiento | ⚪ Pendiente | Suite completa E2E/Seguridad/Rendimiento, optimización móvil y de costos, compilación Android/iOS/Web y despliegue progresivo. |
+| **Fase 6** | Planificador de Viajes (Oculto) | ✅ **Completada y Validada (133/133 tests)** | Protegido por Feature Flag: itinerarios manuales y asistidos, flexibilidad horaria (0/15/30/60m), edición inteligente en 3 niveles, reorganización con confirmación. |
+| **Fase 7** | Administración y Control | ✅ **Completada y Validada (147/147 tests)** | Panel Admin (`apps/admin` y Web), auditoría inmutable (`audit_logs`), inmutabilidad de testimonios, moderación de opiniones y evidencias, gestión en caliente de feature flags y reportes comunitarios. |
+| **Fase 8** | Pruebas, Optimización y Lanzamiento | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Suite completa E2E/Seguridad/Rendimiento, optimización móvil y de costos, compilación Android/iOS/Web y despliegue progresivo. |
 
 ---
 
@@ -380,6 +380,58 @@
 - **Criterios de aceptación:**
   - Web: Panel flotante con selector de viajes, días, modal de 3 niveles de alternativas y previsualización interactiva de reorganización.
   - Mobile: Pestaña `🗺️ Viajes`, tarjetas de itinerario, modal de alternativas en 3 niveles y ajuste de horarios con bypass interno para testing. *(Completado)*
+
+---
+
+## Desglose Detallado — FASE 7: Administración y Control (✅ Completada)
+
+> **Estado:** Fase 7 implementada, probada y validada en su totalidad con 147 pruebas pasando en el monorepo (155 incluyendo el motor de IA en Python). Prohíbe formalmente la alteración silenciosa de testimonios y exige motivos de auditoría para toda acción administrativa.
+
+### Tarea 7.1 — Modelo de Datos para Reportes, Errores y Modelos de IA (`05-phase7-admin.sql`)
+- **Objetivo:** Crear tablas relacionales con soporte para reportes comunitarios (`content_reports`), errores de procesamiento de IA e ingesta (`processing_errors`), configuración de modelos de IA locales (`ai_models_config`) e índices optimizados en `audit_logs`.
+- **Archivos involucrados:** `infrastructure/database/init/05-phase7-admin.sql`.
+- **Criterios de aceptación:**
+  - Restricciones de integridad referencial, checks de estados y unicidad en nombres de modelos.
+  - Índices rápidos sobre `audit_logs(entity_type, entity_id)`, `actor_user_id` y `created_at DESC`. *(Completado)*
+
+### Tarea 7.2 — Reglas de Gobernanza, RBAC e Inmutabilidad de Testimonios
+- **Objetivo:** Garantizar que ningún usuario administrativo pueda alterar silenciosamente opiniones o evidencias. Exigir motivo de auditoría de al menos 10 caracteres y segmentar permisos entre `ADMIN` y `MODERATOR`.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `packages/validation/src/index.ts`.
+- **Criterios de aceptación:**
+  - `validateAdminAuditRequest`: Bloquea acciones de usuarios no administrativos y restringe a moderadores la modificación de feature flags y roles de usuario.
+  - `assertContentImmutability`: Verifica que el texto original de reseñas permanezca inviolable; solo se permite moderar su estado (`PUBLISHED`, `FLAGGED`, `REJECTED`, `DISPUTED`).
+  - `evaluateModerationTransition`: Valida transiciones de estado legales. *(Completado)*
+
+### Tarea 7.3 — Módulo Backend de Administración y Auditoría (`apps/api`)
+- **Objetivo:** Implementar los controladores, servicios y guardias RBAC de administración en NestJS con registro automático e inmutable en `audit_logs`.
+- **Archivos involucrados:** `apps/api/src/modules/admin/admin.guard.ts`, `apps/api/src/modules/admin/admin.service.ts`, `apps/api/src/modules/admin/admin.controller.ts`, `apps/api/src/app.module.ts`.
+- **Criterios de aceptación:**
+  - `GET /admin/stats`: Métricas agregadas verificables de usuarios, lugares, evidencias, opiniones, viajes, reportes y errores.
+  - `GET /admin/audit-logs`: Consulta filtrable de trazabilidad inmutable.
+  - `PATCH /admin/users/:userId/role`: Cambio auditado de roles de usuario (restringido a `ADMIN`).
+  - `PATCH /admin/places/:placeId`: Corrección de georreferenciación y metadatos con actualización de PostGIS `ST_SetSRID(ST_MakePoint(lng, lat), 4326)`.
+  - `POST /admin/moderation/review/:reviewId` y `POST /admin/moderation/evidence/:evidenceId`: Moderación de contenido sin alterar textos originales.
+  - `PATCH /admin/feature-flags/:key`: Activación/desactivación en caliente de feature flags con auditoría.
+  - `POST /reports` y `PATCH /admin/reports/:reportId`: Flujo completo de reportes comunitarios y resolución. *(Completado)*
+
+### Tarea 7.4 — Suite de Pruebas de Integración y Calidad (`phase7.integration.test.ts`)
+- **Objetivo:** Probar de extremo a extremo los 10 escenarios críticos de gobernanza y control administrativo.
+- **Archivos involucrados:** `apps/api/src/phase7.integration.test.ts`.
+- **Criterios de aceptación:**
+  - 10/10 pruebas de integración pasando (69/69 pruebas en total en `apps/api`). *(Completado)*
+
+### Tarea 7.5 — SDK y Servicio Operativo de Administración (`apps/admin`)
+- **Objetivo:** Encapsular la lógica de gestión administrativa en una librería/aplicación modular reutilizable con pruebas unitarias propias.
+- **Archivos involucrados:** `apps/admin/src/index.ts`, `apps/admin/src/admin.test.ts`.
+- **Criterios de aceptación:**
+  - `AdminDashboardService`: Carga de panorama, alternancia de banderas con auditoría y moderación. 5/5 pruebas unitarias pasando. *(Completado)*
+
+### Tarea 7.6 — Panel de Control Administrativo Interactivo en Web (`apps/web`)
+- **Objetivo:** Desarrollar interfaz gráfica para administradores y moderadores en Next.js.
+- **Archivos involucrados:** `apps/web/src/components/AdminControlPanel.tsx`, `apps/web/src/app/page.tsx`.
+- **Criterios de aceptación:**
+  - Métricas en tiempo real, gestión visual de feature flags, moderación de reportes comunitarios con modal de justificación de auditoría, visor de logs inmutables y monitoreo de modelos de IA locales ($0.00). *(Completado)*
+
 
 
 

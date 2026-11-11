@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertContentImmutability,
   calculateDeterministicPlaceScore,
   calculateEvidenceConfidence,
   calculateNativeSentimentScore,
@@ -10,6 +11,7 @@ import {
   determineReviewTypeForCategory,
   estimateTravelMinutes,
   evaluateBudgetFit,
+  evaluateModerationTransition,
   evaluatePlaceDuplicate,
   evaluateScheduleCompatibility,
   formatNativeReviewSnippet,
@@ -23,6 +25,7 @@ import {
   SurpriseCandidate,
   synthesizeAspectSummaries,
   tiersAboveBudget,
+  validateAdminAuditRequest,
   verifyAntiHallucination,
   verifyProximityForVisit,
   verifyQrTokenForPlace,
@@ -698,6 +701,90 @@ describe('@exploro/business-rules', () => {
       expect(impact.shiftedItems[0]?.itemId).toBe('item-2');
       expect(impact.shiftedItems[0]?.proposedStartTime).toBe('12:45');
       expect(impact.reason).toContain('requiere desplazar');
+    });
+  });
+
+  describe('Fase 7 — Administración, Control y Gobernanza Inmutable', () => {
+    it('valida que las peticiones administrativas requieran rol autorizado y motivo auditable >= 10 caracteres', () => {
+      // 1. Rechazo a rol USER común
+      const userReq = validateAdminAuditRequest({
+        actorUserId: 'u-1',
+        actorRole: 'USER',
+        entityType: 'PLACE',
+        entityId: 'p-1',
+        action: 'UPDATE',
+        reason: 'Motivo largo pero sin permisos',
+      });
+      expect(userReq.valid).toBe(false);
+      expect(userReq.error).toContain('Permisos insuficientes');
+
+      // 2. Rechazo a MODERATOR intentando cambiar FEATURE_FLAGS
+      const modFlagReq = validateAdminAuditRequest({
+        actorUserId: 'u-mod',
+        actorRole: 'MODERATOR',
+        entityType: 'FEATURE_FLAG',
+        entityId: 'trip_planner_enabled',
+        action: 'TOGGLE',
+        reason: 'Activación de flag por moderador',
+      });
+      expect(modFlagReq.valid).toBe(false);
+      expect(modFlagReq.error).toContain('no tiene permisos para modificar usuarios o feature flags');
+
+      // 3. Rechazo por motivo demasiado corto (< 10 chars)
+      const shortReason = validateAdminAuditRequest({
+        actorUserId: 'u-admin',
+        actorRole: 'ADMIN',
+        entityType: 'PLACE',
+        entityId: 'p-1',
+        action: 'UPDATE',
+        reason: 'corto',
+      });
+      expect(shortReason.valid).toBe(false);
+      expect(shortReason.error).toContain('al menos 10 caracteres');
+
+      // 4. Aceptación de ADMIN con motivo adecuado
+      const validAdmin = validateAdminAuditRequest({
+        actorUserId: 'u-admin',
+        actorRole: 'ADMIN',
+        entityType: 'PLACE',
+        entityId: 'p-1',
+        action: 'UPDATE_COORDINATES',
+        reason: 'Corrección satelital de acceso principal según reporte verificado',
+      });
+      expect(validAdmin.valid).toBe(true);
+    });
+
+    it('hace cumplir la regla inquebrantable de inmutabilidad de testimonios y evidencias (MASTER_PROMPT.md)', () => {
+      const originalComment = 'Excelente pizza de masa madre, pero la fila tardó 40 minutos.';
+
+      // No se intenta cambiar el texto -> permitido
+      expect(assertContentImmutability(originalComment, undefined).allowed).toBe(true);
+      expect(assertContentImmutability(originalComment, null).allowed).toBe(true);
+      expect(assertContentImmutability(originalComment, originalComment).allowed).toBe(true);
+
+      // Intento de alteración administrativa silenciosa -> BLOQUEADO ESTRICTAMENTE
+      const altered = assertContentImmutability(
+        originalComment,
+        'Excelente pizza de masa madre, sin filas y rápido servicio.' // Alteración silenciosa pro-negocio
+      );
+      expect(altered.allowed).toBe(false);
+      expect(altered.error).toContain('Violación de inmutabilidad');
+    });
+
+    it('evalúa transiciones válidas de moderación para opiniones y evidencias', () => {
+      // Transición válida
+      const valid = evaluateModerationTransition('PUBLISHED', 'FLAGGED');
+      expect(valid.valid).toBe(true);
+
+      // Transición al mismo estado
+      const same = evaluateModerationTransition('PUBLISHED', 'PUBLISHED');
+      expect(same.valid).toBe(false);
+      expect(same.reason).toContain('ya se encuentra en estado');
+
+      // Estado desconocido
+      const unknown = evaluateModerationTransition('PUBLISHED', 'ESTADO_INEXISTENTE');
+      expect(unknown.valid).toBe(false);
+      expect(unknown.reason).toContain('no es un estado de moderación reconocido');
     });
   });
 });

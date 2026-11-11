@@ -32,6 +32,9 @@ import { ExperiencesController } from './modules/experiences/experiences.control
 import { TripsService } from './modules/trips/trips.service';
 import { TripsController } from './modules/trips/trips.controller';
 import { TripsFeatureFlagGuard } from './modules/trips/trips.guard';
+import { AdminService } from './modules/admin/admin.service';
+import { AdminController, ReportsController } from './modules/admin/admin.controller';
+import { AdminGuard } from './modules/admin/admin.guard';
 
 @Catch()
 export class GlobalApiExceptionFilter implements ExceptionFilter {
@@ -81,6 +84,8 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     RecommendationsController,
     ExperiencesController,
     TripsController,
+    AdminController,
+    ReportsController,
   ],
   providers: [
     DatabaseService,
@@ -96,6 +101,8 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     ExperiencesService,
     TripsService,
     TripsFeatureFlagGuard,
+    AdminService,
+    AdminGuard,
     {
       provide: APP_FILTER,
       useClass: GlobalApiExceptionFilter,

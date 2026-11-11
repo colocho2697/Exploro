@@ -420,6 +420,89 @@ export const applyReorganizationSchema = z.object({
   affectedItemIds: z.array(z.string().uuid()),
 });
 
+// =============================================================================
+// FASE 7: ADMINISTRACIÓN Y CONTROL
+// =============================================================================
+
+export const moderateContentSchema = z.object({
+  status: z.enum(['APPROVED', 'FLAGGED', 'REJECTED', 'DISPUTED'], {
+    errorMap: () => ({ message: 'Estado de moderación inválido' }),
+  }),
+  reason: z
+    .string({ required_error: 'El motivo de auditoría es obligatorio' })
+    .trim()
+    .min(10, 'El motivo de auditoría debe tener al menos 10 caracteres')
+    .max(500, 'El motivo no puede exceder 500 caracteres'),
+});
+
+export const updateUserRoleSchema = z.object({
+  role: z.enum(['TRAVELER', 'USER', 'MODERATOR', 'ADMIN'], {
+    errorMap: () => ({ message: 'Rol inválido' }),
+  }),
+  isActive: z.boolean().optional(),
+  reason: z
+    .string({ required_error: 'El motivo de auditoría es obligatorio' })
+    .trim()
+    .min(10, 'El motivo de auditoría debe tener al menos 10 caracteres')
+    .max(500),
+});
+
+export const updateFeatureFlagSchema = z.object({
+  enabled: z.boolean({ required_error: 'El estado enabled es requerido' }),
+  description: z.string().trim().max(255).optional(),
+  reason: z
+    .string({ required_error: 'El motivo de auditoría es obligatorio' })
+    .trim()
+    .min(10, 'El motivo de auditoría debe tener al menos 10 caracteres')
+    .max(500),
+});
+
+export const createReportSchema = z.object({
+  targetType: z.enum(['PLACE', 'USER_REVIEW', 'EVIDENCE', 'COMMUNITY_NOTE'], {
+    errorMap: () => ({ message: 'Tipo de objetivo inválido' }),
+  }),
+  targetId: z.string().trim().min(1, 'El targetId es requerido'),
+  reason: z
+    .string({ required_error: 'El motivo es requerido' })
+    .trim()
+    .min(5, 'El motivo debe tener al menos 5 caracteres')
+    .max(100),
+  details: z.string().trim().max(1000).optional(),
+});
+
+export const resolveReportSchema = z.object({
+  status: z.enum(['RESOLVED', 'DISMISSED'], {
+    errorMap: () => ({ message: 'Estado de resolución inválido' }),
+  }),
+  resolutionNotes: z
+    .string({ required_error: 'Las notas de resolución son obligatorias' })
+    .trim()
+    .min(10, 'Las notas de resolución deben tener al menos 10 caracteres')
+    .max(1000),
+});
+
+export const adminUpdatePlaceSchema = z.object({
+  name: z.string().trim().min(2).max(180).optional(),
+  description: z.string().trim().min(10).optional(),
+  addressText: z.string().trim().max(255).optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
+  priceTier: z
+    .enum(['FREE', 'LOW', 'MEDIUM', 'HIGH', 'LUXURY', 'UNKNOWN'])
+    .optional(),
+  avgPriceMin: z.number().min(0).optional(),
+  avgPriceMax: z.number().min(0).optional(),
+  verificationStatus: z
+    .enum(['UNVERIFIED', 'COMMUNITY_VERIFIED', 'VERIFIED', 'DISPUTED'])
+    .optional(),
+  isActive: z.boolean().optional(),
+  auditReason: z
+    .string({ required_error: 'El motivo de auditoría es obligatorio' })
+    .trim()
+    .min(10, 'El motivo de auditoría debe tener al menos 10 caracteres')
+    .max(500),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
@@ -453,6 +536,12 @@ export type ReorderTripItemsInput = z.infer<typeof reorderTripItemsSchema>;
 export type AssistedPlanRequestInput = z.infer<typeof assistedPlanRequestSchema>;
 export type GetAlternativesQueryInput = z.infer<typeof getAlternativesQuerySchema>;
 export type ApplyReorganizationInput = z.infer<typeof applyReorganizationSchema>;
+export type ModerateContentInput = z.infer<typeof moderateContentSchema>;
+export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
+export type UpdateFeatureFlagInput = z.infer<typeof updateFeatureFlagSchema>;
+export type CreateReportInput = z.infer<typeof createReportSchema>;
+export type ResolveReportInput = z.infer<typeof resolveReportSchema>;
+export type AdminUpdatePlaceInput = z.infer<typeof adminUpdatePlaceSchema>;
 
 
 

@@ -1,14 +1,20 @@
 import {
   ActivityAlternativeOptionDTO,
   ActivityLogDTO,
+  AdminFeatureFlagDTO,
+  AdminStatsDTO,
+  AdminUserDTO,
   AiFinOpsMetrics,
+  AiModelConfigDTO,
   ApiResponse,
   AppBootstrapConfig,
+  AuditLogDTO,
   AuthSessionResponse,
   AutocompleteSuggestion,
   CategoryDTO,
   CityDTO,
   CollectionDTO,
+  ContentReportDTO,
   DestinationDTO,
   DuplicateCandidateDTO,
   EvidenceSummaryDTO,
@@ -18,6 +24,7 @@ import {
   PlaceCardDTO,
   PlaceDetailDTO,
   PlaceRecommendationSummary,
+  ProcessingErrorDTO,
   RecalculateAspectsResponse,
   RouteSummary,
   SourceDTO,
@@ -31,11 +38,13 @@ import {
   VerifyVisitResponse,
 } from '@exploro/shared-types';
 import {
+  AdminUpdatePlaceInput,
   ApplyReorganizationInput,
   AssistedPlanRequestInput,
   CompleteActivityReviewInput,
   CreateCollectionInput,
   CreateEvidenceInput,
+  CreateReportInput,
   CreateSourceInput,
   CreateTripInput,
   CreateTripItemInput,
@@ -44,13 +53,17 @@ import {
   GeoAutocompleteQueryInput,
   GeoRouteInput,
   LoginInput,
+  ModerateContentInput,
   RegisterInput,
   ReorderTripItemsInput,
+  ResolveReportInput,
   StartActivityInput,
   SurpriseMeRequestInput,
+  UpdateFeatureFlagInput,
   UpdatePreferencesInput,
   UpdateTripInput,
   UpdateTripItemInput,
+  UpdateUserRoleInput,
   VerifyVisitInput,
 } from '@exploro/validation';
 
@@ -623,6 +636,180 @@ export class ExploroApiClient {
     );
     return res.data;
   }
+
+  // -------------------------------------------------------------------------
+  // FASE 7: Administración, Control y Auditoría Inmutable
+  // -------------------------------------------------------------------------
+
+  public async getAdminStats(): Promise<AdminStatsDTO> {
+    const res = await this.request<AdminStatsDTO>('/admin/stats');
+    return res.data;
+  }
+
+  public async listAuditLogs(query?: {
+    entityType?: string;
+    actorUserId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AuditLogDTO[]> {
+    const params = new URLSearchParams();
+    if (query?.entityType) params.set('entityType', query.entityType);
+    if (query?.actorUserId) params.set('actorUserId', query.actorUserId);
+    if (query?.limit !== undefined) params.set('limit', String(query.limit));
+    if (query?.offset !== undefined) params.set('offset', String(query.offset));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await this.request<AuditLogDTO[]>(`/admin/audit-logs${qs}`);
+    return res.data;
+  }
+
+  public async listAdminUsers(): Promise<AdminUserDTO[]> {
+    const res = await this.request<AdminUserDTO[]>('/admin/users');
+    return res.data;
+  }
+
+  public async updateUserRole(
+    userId: string,
+    data: UpdateUserRoleInput
+  ): Promise<AdminUserDTO> {
+    const res = await this.request<AdminUserDTO>(
+      `/admin/users/${encodeURIComponent(userId)}/role`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async adminUpdatePlace(
+    placeId: string,
+    data: AdminUpdatePlaceInput
+  ): Promise<PlaceDetailDTO> {
+    const res = await this.request<PlaceDetailDTO>(
+      `/admin/places/${encodeURIComponent(placeId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async moderateReview(
+    reviewId: string,
+    data: ModerateContentInput
+  ): Promise<{ success: boolean; id: string; status: string }> {
+    const res = await this.request<{ success: boolean; id: string; status: string }>(
+      `/admin/moderation/review/${encodeURIComponent(reviewId)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async moderateEvidence(
+    evidenceId: string,
+    data: ModerateContentInput
+  ): Promise<{ success: boolean; id: string; status: string }> {
+    const res = await this.request<{ success: boolean; id: string; status: string }>(
+      `/admin/moderation/evidence/${encodeURIComponent(evidenceId)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async listAdminFeatureFlags(): Promise<AdminFeatureFlagDTO[]> {
+    const res = await this.request<AdminFeatureFlagDTO[]>('/admin/feature-flags');
+    return res.data;
+  }
+
+  public async updateAdminFeatureFlag(
+    key: string,
+    data: UpdateFeatureFlagInput
+  ): Promise<AdminFeatureFlagDTO> {
+    const res = await this.request<AdminFeatureFlagDTO>(
+      `/admin/feature-flags/${encodeURIComponent(key)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async createContentReport(
+    data: CreateReportInput
+  ): Promise<ContentReportDTO> {
+    const res = await this.request<ContentReportDTO>('/reports', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+  }
+
+  public async listContentReports(query?: {
+    status?: string;
+  }): Promise<ContentReportDTO[]> {
+    const qs = query?.status ? `?status=${encodeURIComponent(query.status)}` : '';
+    const res = await this.request<ContentReportDTO[]>(`/admin/reports${qs}`);
+    return res.data;
+  }
+
+  public async resolveContentReport(
+    reportId: string,
+    data: ResolveReportInput
+  ): Promise<ContentReportDTO> {
+    const res = await this.request<ContentReportDTO>(
+      `/admin/reports/${encodeURIComponent(reportId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async listProcessingErrors(): Promise<ProcessingErrorDTO[]> {
+    const res = await this.request<ProcessingErrorDTO[]>('/admin/errors');
+    return res.data;
+  }
+
+  public async resolveProcessingError(
+    errorId: string
+  ): Promise<{ success: boolean; id: string }> {
+    const res = await this.request<{ success: boolean; id: string }>(
+      `/admin/errors/${encodeURIComponent(errorId)}/resolve`,
+      {
+        method: 'PATCH',
+      }
+    );
+    return res.data;
+  }
+
+  public async listAiModelsConfig(): Promise<AiModelConfigDTO[]> {
+    const res = await this.request<AiModelConfigDTO[]>('/admin/ai-models');
+    return res.data;
+  }
+
+  public async updateAiModelConfig(
+    taskType: string,
+    data: { modelName: string; maxTokens?: number; temperature?: number; isActive?: boolean }
+  ): Promise<AiModelConfigDTO> {
+    const res = await this.request<AiModelConfigDTO>(
+      `/admin/ai-models/${encodeURIComponent(taskType)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
 }
+
 
 

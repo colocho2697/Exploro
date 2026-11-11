@@ -18,6 +18,7 @@ import { ModeSelection } from '../components/ModeSelection';
 import { PlaceCard } from '../components/PlaceCard';
 import { SurpriseMe } from '../components/SurpriseMe';
 import { TripPlannerPanel } from '../components/TripPlannerPanel';
+import { AdminControlPanel } from '../components/AdminControlPanel';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { useLibrary } from '../hooks/useLibrary';
 import { useSession } from '../hooks/useSession';
@@ -58,6 +59,7 @@ export default function ExploroHomePage(): React.JSX.Element {
   const [showAuth, setShowAuth] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showTripPlanner, setShowTripPlanner] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [highlightSlug, setHighlightSlug] = useState<string | null>(null);
 
   // Fase 3: Ruteo y cálculo de distancias sin costo
@@ -221,6 +223,14 @@ export default function ExploroHomePage(): React.JSX.Element {
           >
             🗺️ Itinerarios
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setShowAdmin(true)}
+            style={{ borderColor: '#f43f5e', color: '#fb7185' }}
+          >
+            🛡️ Admin
+          </button>
           <button type="button" className="btn" onClick={() => setSelectedMode(null)}>
             Cambiar modalidad
           </button>
@@ -259,6 +269,18 @@ export default function ExploroHomePage(): React.JSX.Element {
             onClose={() => setShowTripPlanner(false)}
             onRequireAuth={() => {
               setShowTripPlanner(false);
+              setShowAuth(true);
+            }}
+          />
+        )}
+        {showAdmin && (
+          <AdminControlPanel
+            client={session.client}
+            isLoggedIn={Boolean(session.user)}
+            userRole={session.user?.role}
+            onClose={() => setShowAdmin(false)}
+            onRequireAuth={() => {
+              setShowAdmin(false);
               setShowAuth(true);
             }}
           />

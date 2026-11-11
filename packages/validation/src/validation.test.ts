@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  adminUpdatePlaceSchema,
   applyReorganizationSchema,
   assistedPlanRequestSchema,
   completeActivityReviewSchema,
   coordinatesSchema,
   createEvidenceSchema,
+  createReportSchema,
   createSourceSchema,
   createTripItemSchema,
   createTripSchema,
@@ -13,11 +15,15 @@ import {
   extractAspectsBodySchema,
   geoAutocompleteQuerySchema,
   geoRouteSchema,
+  moderateContentSchema,
   registerSchema,
   reorderTripItemsSchema,
+  resolveReportSchema,
   startActivitySchema,
   surpriseMeRequestSchema,
+  updateFeatureFlagSchema,
   updatePreferencesSchema,
+  updateUserRoleSchema,
   verifyVisitSchema,
 } from './index';
 
@@ -348,6 +354,79 @@ describe('@exploro/validation schemas', () => {
       affectedItemIds: ['77777777-7777-7777-7777-777777777702'],
     });
     expect(reorg.shiftMinutes).toBe(30);
+  });
+
+  // FASE 7: Pruebas de esquemas de administración, control y auditoría
+  it('valida la moderación de contenido exigiendo motivo de auditoría mínimo de 10 caracteres (Fase 7)', () => {
+    const valid = moderateContentSchema.parse({
+      status: 'FLAGGED',
+      reason: 'Contenido reportado por lenguaje inapropiado y spam publicitario',
+    });
+    expect(valid.status).toBe('FLAGGED');
+    expect(valid.reason).toContain('lenguaje inapropiado');
+
+    const shortReason = moderateContentSchema.safeParse({
+      status: 'FLAGGED',
+      reason: 'corto',
+    });
+    expect(shortReason.success).toBe(false);
+  });
+
+  it('valida el cambio de rol de usuario con auditoría obligatoria (Fase 7)', () => {
+    const valid = updateUserRoleSchema.parse({
+      role: 'MODERATOR',
+      isActive: true,
+      reason: 'Promoción a moderador tras superar período de prueba comunitaria',
+    });
+    expect(valid.role).toBe('MODERATOR');
+
+    const invalidRole = updateUserRoleSchema.safeParse({
+      role: 'SUPER_ADMIN',
+      reason: 'Motivo largo válido para prueba',
+    });
+    expect(invalidRole.success).toBe(false);
+  });
+
+  it('valida la conmutación de feature flags con motivo auditable (Fase 7)', () => {
+    const valid = updateFeatureFlagSchema.parse({
+      enabled: true,
+      reason: 'Habilitación controlada para pruebas de QA en producción',
+    });
+    expect(valid.enabled).toBe(true);
+
+    const missingReason = updateFeatureFlagSchema.safeParse({
+      enabled: false,
+    });
+    expect(missingReason.success).toBe(false);
+  });
+
+  it('valida la creación y resolución de reportes comunitarios (Fase 7)', () => {
+    const report = createReportSchema.parse({
+      targetType: 'PLACE',
+      targetId: '77777777-7777-7777-7777-777777777701',
+      reason: 'Lugar cerrado permanentemente',
+      details: 'El local cerró en septiembre y fue reemplazado por otro negocio',
+    });
+    expect(report.targetType).toBe('PLACE');
+
+    const resolution = resolveReportSchema.parse({
+      status: 'RESOLVED',
+      resolutionNotes: 'Se verificó en sitio y se actualizó el estado a inactivo en el catálogo',
+    });
+    expect(resolution.status).toBe('RESOLVED');
+  });
+
+  it('valida la actualización administrativa de datos de un lugar con motivo auditable (Fase 7)', () => {
+    const update = adminUpdatePlaceSchema.parse({
+      name: "L'Industrie Pizzeria West Village Oficial",
+      lat: 40.7305,
+      lng: -74.0021,
+      priceTier: 'MEDIUM',
+      verificationStatus: 'VERIFIED',
+      auditReason: 'Corrección de coordenadas exactas y confirmación de verificación',
+    });
+    expect(update.priceTier).toBe('MEDIUM');
+    expect(update.verificationStatus).toBe('VERIFIED');
   });
 });
 

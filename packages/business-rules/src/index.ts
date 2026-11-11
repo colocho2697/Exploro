@@ -12,6 +12,7 @@ import {
   ShiftedItemProposal,
   TourismReviewInput,
   TripReorganizationImpactDTO,
+  UserRole,
 } from '@exploro/shared-types';
 
 /**
@@ -1334,6 +1335,122 @@ export function detectReorganizationImpact(params: {
     scheduleOverflowsDay: overflows,
     recommendationMessage,
   };
+}
+
+// =============================================================================
+// FASE 7: ADMINISTRACIÓN, GOBERNANZA Y AUDITORÍA INMUTABLE
+// =============================================================================
+
+export interface AuditActionRequest {
+  actorUserId: string;
+  actorRole: UserRole;
+  entityType:
+    | 'PLACE'
+    | 'EVIDENCE'
+    | 'USER_REVIEW'
+    | 'FEATURE_FLAG'
+    | 'USER'
+    | 'CATEGORY'
+    | 'REPORT'
+    | 'PROCESSING_ERROR'
+    | 'AI_MODEL';
+  entityId: string;
+  action: string;
+  reason: string;
+}
+
+/**
+ * Regla de Gobernanza (Fase 7):
+ * Ningún administrador puede modificar el sistema sin rol autorizado y motivo auditable de al menos 10 caracteres.
+ */
+export function validateAdminAuditRequest(
+  req: AuditActionRequest
+): { valid: boolean; error?: string } {
+  if (req.actorRole !== 'ADMIN' && req.actorRole !== 'MODERATOR') {
+    return {
+      valid: false,
+      error: 'Permisos insuficientes para realizar acciones administrativas.',
+    };
+  }
+
+  // Moderadores solo pueden moderar contenido o reportes, no usuarios ni feature flags
+  if (
+    req.actorRole === 'MODERATOR' &&
+    (req.entityType === 'FEATURE_FLAG' || req.entityType === 'USER')
+  ) {
+    return {
+      valid: false,
+      error:
+        'El rol MODERATOR no tiene permisos para modificar usuarios o feature flags.',
+    };
+  }
+
+  if (!req.reason || req.reason.trim().length < 10) {
+    return {
+      valid: false,
+      error:
+        'Toda modificación administrativa requiere un motivo de auditoría de al menos 10 caracteres.',
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Regla de Inmutabilidad de Testimonios y Evidencias (MASTER_PROMPT.md Fase 7):
+ * "No permitir que cualquier usuario administrativo pueda alterar silenciosamente las opiniones o evidencias."
+ *
+ * El contenido textual expresado por usuarios o extraído de fuentes es inmutable.
+ * Los administradores pueden moderar el estado (PUBLISHED, FLAGGED, REJECTED), pero NO editar el texto.
+ */
+export function assertContentImmutability(
+  originalText: string,
+  proposedText: string | undefined | null
+): { allowed: boolean; error?: string } {
+  if (proposedText === undefined || proposedText === null) {
+    return { allowed: true }; // No se intentó cambiar el texto
+  }
+
+  if (proposedText.trim() !== originalText.trim()) {
+    return {
+      allowed: false,
+      error:
+        'Violación de inmutabilidad: Por política de gobernanza y transparencia, el texto original de opiniones y evidencias no puede ser alterado por administradores.',
+    };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Transiciones de estado permitidas en la moderación de contenido.
+ */
+export function evaluateModerationTransition(
+  currentStatus: string,
+  newStatus: string
+): { valid: boolean; reason?: string } {
+  const allowedStatuses = [
+    'PUBLISHED',
+    'APPROVED',
+    'FLAGGED',
+    'REJECTED',
+    'DISPUTED',
+  ];
+  if (!allowedStatuses.includes(newStatus)) {
+    return {
+      valid: false,
+      reason: `El estado ${newStatus} no es un estado de moderación reconocido.`,
+    };
+  }
+
+  if (currentStatus === newStatus) {
+    return {
+      valid: false,
+      reason: `El contenido ya se encuentra en estado ${newStatus}.`,
+    };
+  }
+
+  return { valid: true };
 }
 
 

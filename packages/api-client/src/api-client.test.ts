@@ -216,5 +216,98 @@ describe('@exploro/api-client', () => {
     expect(alts.verySimilar).toHaveLength(1);
     expect(alts.verySimilar[0]?.matchLevel).toBe('VERY_SIMILAR');
   });
+
+  it('permite invocar endpoints administrativos con token de sesión con rol administrativo', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: {
+            totalUsers: 15,
+            totalPlaces: 42,
+            totalEvidences: 120,
+            totalUserReviews: 85,
+            totalTrips: 7,
+            pendingReportsCount: 2,
+            unresolvedErrorsCount: 1,
+            activeFeatureFlagsCount: 5,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: 'audit-1',
+              actorUserId: 'admin-1',
+              action: 'UPDATE_FEATURE_FLAG',
+              entityType: 'FEATURE_FLAG',
+              entityId: 'trip_planner_enabled',
+              reason: 'Habilitando planificador para testing',
+              createdAt: '2026-11-11T12:00:00Z',
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: {
+            success: true,
+            id: 'rev-1',
+            status: 'FLAGGED',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: {
+            key: 'trip_planner_enabled',
+            name: 'Planificador de Viajes',
+            enabled: true,
+          },
+        }),
+      });
+
+    const client = new ExploroApiClient({
+      baseUrl: 'http://localhost:4000/api/v1',
+      getAccessToken: () => 'admin-jwt-token',
+      fetchImpl: mockFetch as unknown as typeof fetch,
+    });
+
+    const stats = await client.getAdminStats();
+    expect(stats.totalUsers).toBe(15);
+    expect(stats.pendingReportsCount).toBe(2);
+
+    const auditLogs = await client.listAuditLogs({ entityType: 'FEATURE_FLAG' });
+    expect(auditLogs).toHaveLength(1);
+    expect(auditLogs[0]?.action).toBe('UPDATE_FEATURE_FLAG');
+
+    const modReview = await client.moderateReview('rev-1', {
+      status: 'FLAGGED',
+      reason: 'Contenido reportado por lenguaje inapropiado verificado',
+    });
+    expect(modReview.status).toBe('FLAGGED');
+
+    const updatedFlag = await client.updateAdminFeatureFlag('trip_planner_enabled', {
+      enabled: true,
+      reason: 'Habilitando planificador para testing general',
+    });
+    expect(updatedFlag.enabled).toBe(true);
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
 });
+
 

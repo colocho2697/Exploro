@@ -4,6 +4,33 @@ Todos los cambios importantes en la arquitectura, código, base de datos y docum
 
 ---
 
+## [0.8.0] — 2026-11-11 (Fase 7: Administración, Control y Gobernanza Inmutable Completada)
+
+### Agregado
+- **Modelo de Datos y Migración de Base de Datos (`05-phase7-admin.sql`)**:
+  - Tabla `content_reports`: Reportes comunitarios sobre lugares, opiniones o evidencias con estados (`PENDING`, `IN_REVIEW`, `RESOLVED`, `DISMISSED`) y notas de resolución.
+  - Tabla `processing_errors`: Registro de errores de procesamiento de IA local e ingesta con resolución auditada.
+  - Tabla `ai_models_config`: Configuración local de hiperparámetros de modelos de IA ($0.00 Ollama).
+  - Índices de alto rendimiento en `audit_logs` (`(entity_type, entity_id)`, `actor_user_id`, `created_at DESC`).
+  - Restricción ampliada `chk_user_reviews_moderation` con estados (`PUBLISHED`, `FLAGGED`, `HIDDEN`, `REJECTED`, `DISPUTED`).
+- **Gobernanza y Reglas de Inmutabilidad (`packages/business-rules` y `packages/validation`)**:
+  - `validateAdminAuditRequest`: Exige motivo de auditoría obligatorio de al menos 10 caracteres para cualquier acción administrativa; segmenta permisos entre `ADMIN` y `MODERATOR`.
+  - `assertContentImmutability`: Cumple el mandato estricto de MASTER_PROMPT.md: prohibición absoluta de alteración silenciosa de testimonios o evidencias. El texto es inviolable; solo se permite moderar estados.
+  - `evaluateModerationTransition`: Valida transiciones de estado legales.
+  - Esquemas Zod: `moderateContentSchema`, `updateUserRoleSchema`, `updateFeatureFlagSchema`, `createReportSchema`, `resolveReportSchema`, `adminUpdatePlaceSchema`.
+- **Módulo Backend NestJS de Administración (`apps/api/src/modules/admin/`)**:
+  - `AdminGuard`: Guardia RBAC que restringe accesos a `ADMIN` y `MODERATOR`, bloqueando usuarios `TRAVELER` con HTTP 403 Forbidden.
+  - `AdminService` y `AdminController`: Métricas (`GET /admin/stats`), trazabilidad (`GET /admin/audit-logs`), usuarios (`GET /admin/users`, `PATCH /admin/users/:id/role`), corrección de coordenadas PostGIS (`PATCH /admin/places/:id`), moderación (`POST /admin/moderation/review/:id`, `POST /admin/moderation/evidence/:id`), feature flags (`GET /admin/feature-flags`, `PATCH /admin/feature-flags/:key`), reportes comunitarios (`POST /reports`, `GET /admin/reports`, `PATCH /admin/reports/:id`), errores (`GET /admin/errors`, `PATCH /admin/errors/:id/resolve`) y modelos de IA (`GET /admin/ai-models`, `PATCH /admin/ai-models/:modelName`).
+  - 10 pruebas de integración E2E en `apps/api/src/phase7.integration.test.ts` (69 pruebas totales en `apps/api`).
+- **SDK y Servicio Operativo (`apps/admin`)**:
+  - `AdminDashboardService`: Módulo para operaciones administrativas con 5 pruebas unitarias passing.
+- **Panel Web Administrativo Interactivo (`apps/web`)**:
+  - `AdminControlPanel.tsx`: Interfaz web completa con métricas del sistema, control en caliente de feature flags con modal de motivo de auditoría obligatorio, moderación de reportes, historial inmutable y monitoreo de modelos de IA locales.
+- **Verificación Global y Puerta de Calidad**:
+  - Total global: **147 pruebas en monorepo + 8 pruebas en Python = 155 pruebas automatizadas pasando (100% Green)**. 23 tareas de Turborepo ejecutadas limpiamente.
+
+---
+
 ## [0.7.0] — 2026-11-11 (Fase 6: Planificador de Viajes — Oculto bajo Feature Flag Completada)
 
 ### Agregado
