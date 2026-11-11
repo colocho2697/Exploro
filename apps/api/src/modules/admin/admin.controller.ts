@@ -314,3 +314,4 @@ export class ReportsController {
     return { success: true, data };
   }
 }
+

@@ -1,0 +1,40 @@
+# =============================================================================
+# EXPLORO PLATFORM — DOCKERFILE PRODUCCIÓN (apps/api - NestJS)
+# =============================================================================
+FROM node:20-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+# 1. Dependencias y compilación
+FROM base AS builder
+WORKDIR /app
+RUN apk add --no-cache libc6-compat
+
+COPY pnpm-lock.yaml package.json pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @exploro/api build
+
+# 2. Imagen de ejecución ligera
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk add --no-cache libc6-compat
+
+# Usuario no privilegiado para seguridad
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nestjs
+
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/packages ./packages
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/package.json
+
+USER nestjs
+EXPOSE 4000
+ENV PORT=4000
+
+CMD ["node", "apps/api/dist/main.js"]

@@ -17,7 +17,7 @@
 | **Fase 5** | Sistema de Experiencias Propias | ✅ **Completada y Validada (115/115 tests)** | Flujo «Comenzar actividad», cuestionarios cortos adaptados (Restaurantes/Turismo), verificación opcional (GPS/QR), integración inmutable al ranking. |
 | **Fase 6** | Planificador de Viajes (Oculto) | ✅ **Completada y Validada (133/133 tests)** | Protegido por Feature Flag: itinerarios manuales y asistidos, flexibilidad horaria (0/15/30/60m), edición inteligente en 3 niveles, reorganización con confirmación. |
 | **Fase 7** | Administración y Control | ✅ **Completada y Validada (147/147 tests)** | Panel Admin (`apps/admin` y Web), auditoría inmutable (`audit_logs`), inmutabilidad de testimonios, moderación de opiniones y evidencias, gestión en caliente de feature flags y reportes comunitarios. |
-| **Fase 8** | Pruebas, Optimización y Lanzamiento | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Suite completa E2E/Seguridad/Rendimiento, optimización móvil y de costos, compilación Android/iOS/Web y despliegue progresivo. |
+| **Fase 8** | Pruebas, Optimización y Lanzamiento | ✅ **Completada y Validada (163/163 tests)** | Suite integral E2E/Seguridad/Rendimiento, resiliencia móvil offline y adaptabilidad responsiva, optimización PostgreSQL y Dockerfiles de producción ($0.00), políticas legales (CCPA/GDPR/Delaware) y metadatos de tiendas listos para producción. |
 
 ---
 
@@ -431,6 +431,53 @@
 - **Archivos involucrados:** `apps/web/src/components/AdminControlPanel.tsx`, `apps/web/src/app/page.tsx`.
 - **Criterios de aceptación:**
   - Métricas en tiempo real, gestión visual de feature flags, moderación de reportes comunitarios con modal de justificación de auditoría, visor de logs inmutables y monitoreo de modelos de IA locales ($0.00). *(Completado)*
+
+---
+
+## Desglose Detallado — FASE 8: Pruebas, Optimización y Lanzamiento (✅ Completada)
+
+> **Estado:** Fase 8 implementada, probada y validada al 100%. Total global de **163 de 163 pruebas automatizadas pasando (155 en monorepo + 8 en AI engine de Python)**. Arquitectura de costo cero ($0.00) verificada, imágenes de producción Dockerfiles multi-stage listas y políticas legales completadas.
+
+### Tarea 8.1 — Pruebas Técnicas, Seguridad y Rendimiento (`phase8.security-perf.test.ts`)
+- **Objetivo:** Ejecutar pruebas exhaustivas de inyección SQL, mitigación XSS, rechazo de tokens JWT falsificados, latencias espaciales PostGIS, benchmarks de caché Redis y estrés de concurrencia.
+- **Archivos involucrados:** `apps/api/src/phase8.security-perf.test.ts`.
+- **Criterios de aceptación:**
+  - Neutralización de payloads SQLi (`' OR 1=1 --`, `UNION SELECT`, `DROP TABLE`) sin errores no controlados.
+  - Mitigación XSS en reseñas y reportes comunitarios preservando el texto sin ejecución.
+  - Rechazo estricto de tokens manipulados o no firmados con HTTP 401 Unauthorized.
+  - Consultas espaciales PostGIS (`ST_DWithin`) ejecutadas en $< 80\text{ ms}$.
+  - Caché de Redis respondiendo en $< 30\text{ ms}$ en lecturas consecutivas.
+  - Concurrencia de 20 peticiones simultáneas con 100% de éxito y cero bloqueos.
+  - Auditoría de FinOps validando costo cero (`$0.00`), tiles OpenStreetMap y geocodificación gratuita.
+  - Trazabilidad transaccional concurrente en `audit_logs`. *(Completado: 8/8 tests passing)*
+
+### Tarea 8.2 — Pruebas Móviles, Resiliencia Offline y Adaptabilidad (`apps/mobile`)
+- **Objetivo:** Garantizar que la app móvil soporte modos offline (stale-while-offline), degradación elegante ante denegación de GPS, adaptabilidad para pantallas compactas y tablets, y conservación de batería.
+- **Archivos involucrados:** `apps/mobile/src/offline.ts`, `apps/mobile/src/mobile.test.ts`.
+- **Criterios de aceptación:**
+  - `OfflineStorageManager`: Caché en memoria/almacenamiento local con TTL y recuperación de datos guardados cuando no hay red.
+  - Adaptabilidad de pantalla: Clasificación dinámica (`PHONE_COMPACT` < 360dp, `PHONE_STANDARD` 360-600dp, `TABLET` $\ge 600\text{dp}$) y columnas responsivas.
+  - `resolveLocationStrategy`: Selección manual de ciudad y coordenadas por defecto sin caídas de app cuando el usuario deniega permisos de geolocalización.
+  - `validateBatteryFriendlyInterval`: Restricción que exige intervalos de rastreo GPS $\ge 30\text{s}$ para evitar agotamiento de batería. *(Completado: 14/14 tests passing)*
+
+### Tarea 8.3 — Optimización de Base de Datos y Contenedores de Producción ($0.00)
+- **Objetivo:** Optimizar índices relacionales y espaciales, ejecutar mantenimiento en PostgreSQL y crear imágenes Docker ligeras para producción.
+- **Archivos involucrados:**
+  - `infrastructure/docker/Dockerfile.api`: Imagen multi-stage en Node Alpine con compilación aislada.
+  - `infrastructure/docker/Dockerfile.web`: Imagen de producción optimizada para Next.js 14 en modo standalone (133 kB First Load JS).
+  - `infrastructure/docker/docker-compose.prod.yml`: Orquestación completa de producción con límites de memoria, healthchecks y persistencia de volúmenes sin dependencias comerciales de pago.
+- **Criterios de aceptación:**
+  - Mantenimiento `VACUUM ANALYZE` aplicado a la base de datos PostgreSQL/PostGIS.
+  - Contenerización reproducible al 100% con arquitectura de costo cero ($0.00). *(Completado)*
+
+### Tarea 8.4 — Documentación Legal, Metadatos de Publicación y Guía de Despliegue
+- **Objetivo:** Redactar los términos y políticas requeridos para tiendas de aplicaciones y marco legal de EE. UU., preparar los listados de tiendas y el protocolo de despliegue.
+- **Archivos involucrados:**
+  - `docs/LEGAL_PRIVACY_POLICY.md`: Política de privacidad en cumplimiento con CCPA/GDPR, prohibición explícita de venta de datos y privacidad de geolocalización.
+  - `docs/TERMS_OF_SERVICE.md`: Términos de servicio bajo jurisdicción de Delaware, cláusula de exención de responsabilidad para datos verificados y reglas comunitarias.
+  - `docs/STORE_METADATA.md`: Títulos, descripciones en inglés (US Market), palabras clave, plan de capturas de pantalla de 6 diapositivas y estrategia de lanzamiento por fases (Fase A: NYC, SFO, CHI).
+  - `docs/DEPLOYMENT_CHECKLIST.md`: Lista de verificación pre-vuelo, variables de entorno, migraciones de base de datos y validaciones de humo post-despliegue. *(Completado)*
+
 
 
 

@@ -4,6 +4,41 @@ Todos los cambios importantes en la arquitectura, código, base de datos y docum
 
 ---
 
+## [1.0.0] — 2026-11-11 (Fase 8: Pruebas, Optimización y Lanzamiento Completada — Versión de Producción)
+
+### Agregado
+- **Suite de Pruebas Técnicas, Seguridad y Rendimiento (`apps/api/src/phase8.security-perf.test.ts`)**:
+  - 8 pruebas exhaustivas de backend en NestJS + PostgreSQL + Redis:
+    - Neutralización de inyección SQL en endpoints de catálogo y búsqueda geoespacial.
+    - Mitigación y preservación segura contra cross-site scripting (XSS) en opiniones de usuarios y reportes comunitarios.
+    - Rechazo de tokens JWT alterados o falsificados con código de estado HTTP 401 Unauthorized.
+    - Benchmark de latencia de consultas espaciales PostGIS `ST_DWithin` ($< 80\text{ ms}$).
+    - Benchmark de latencia de lecturas en caché de Redis ($< 30\text{ ms}$).
+    - Prueba de estrés con 20 peticiones concurrentes de descubrimiento sin pérdida de paquetes ni bloqueos en pool de conexiones.
+    - Verificación programática de costo cero ($0.00) en el arranque del sistema (bootstrap).
+    - Consistencia transaccional concurrente en `audit_logs`.
+- **Módulo de Resiliencia Móvil y Optimización (`apps/mobile/src/offline.ts` & `mobile.test.ts`)**:
+  - `OfflineStorageManager`: Gestor de almacenamiento en caché con soporte para *stale-while-offline*.
+  - `getScreenCategory` & `getGridColumns`: Detección responsiva de factores de forma (`PHONE_COMPACT` < 360dp, `PHONE_STANDARD` 360-600dp, `TABLET` $\ge 600\text{dp}$).
+  - `resolveLocationStrategy`: Degradación elegante y selección de ciudad manual cuando los permisos de geolocalización son denegados por el usuario.
+  - `validateBatteryFriendlyInterval`: Restricción que exige intervalos de rastreo GPS $\ge 30\text{s}$ para salvaguardar la batería del dispositivo.
+  - 4 pruebas unitarias adicionales en `apps/mobile/src/mobile.test.ts` (14 pruebas totales en mobile).
+- **Optimización y Contenerización de Producción (`infrastructure/docker/`)**:
+  - Ejecución de `VACUUM ANALYZE` sobre la base de datos PostgreSQL 16 + PostGIS.
+  - `Dockerfile.api`: Contenedor multi-stage optimizado para NestJS en Node Alpine.
+  - `Dockerfile.web`: Contenedor de producción para Next.js 14 en modo standalone (133 kB First Load JS).
+  - `docker-compose.prod.yml`: Orquestador de producción con límites de memoria por servicio, healthchecks y configuración de costo cero.
+- **Marco Legal, Metadatos de Publicación y Despliegue (`docs/`)**:
+  - `docs/LEGAL_PRIVACY_POLICY.md`: Política de privacidad en cumplimiento con CCPA y GDPR; política estricta de no venta de datos y recolección opcional de GPS para visitas verificadas.
+  - `docs/TERMS_OF_SERVICE.md`: Términos de servicio regulados bajo las leyes del Estado de Delaware; inmutabilidad de testimonios y cláusula de exención.
+  - `docs/STORE_METADATA.md`: Títulos, descripciones y palabras clave optimizadas para el mercado de Estados Unidos en App Store y Google Play; arquitectura de 6 diapositivas de capturas de pantalla y despliegue por fases (NYC, SFO, CHI).
+  - `docs/DEPLOYMENT_CHECKLIST.md`: Guía de despliegue pre-vuelo y pruebas de humo post-instalación.
+- **Verificación Global y Puerta de Calidad**:
+  - Total global: **155 pruebas automatizadas en monorepo + 8 pruebas en Python = 163 pruebas pasando (100% Green)**.
+  - 23/23 tareas de compilación, verificación de tipos y tests exitosas en Turborepo.
+
+---
+
 ## [0.8.0] — 2026-11-11 (Fase 7: Administración, Control y Gobernanza Inmutable Completada)
 
 ### Agregado

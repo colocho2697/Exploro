@@ -1,23 +1,23 @@
 # Estrategia y Registro de Pruebas — Exploro
 
-**Versión:** 1.7.0  
-**Última ejecución:** 2026-11-11 (Fase 7 completada — **147 de 147 pruebas en monorepo aprobadas; 155 pruebas totales con Pytest**)
+**Versión:** 1.8.0  
+**Última ejecución:** 2026-11-11 (Fase 8 completada — **155 de 155 pruebas en monorepo aprobadas; 163 pruebas totales con Pytest — 100% Green**)
 
 ---
 
-## 1. Resumen de Suites Ejecutadas en Fase 7
+## 1. Resumen de Suites Ejecutadas en Fase 8
 
 | Suite / Módulo | Herramienta | Pruebas | Estado | Qué se comprobó |
 | :--- | :--- | :--- | :--- | :--- |
-| `@exploro/validation` | Vitest | 24 (+5) | ✅ PASS | Esquemas Zod para administración: `moderateContentSchema` ($\ge 10$ caracteres de motivo), `updateUserRoleSchema`, `updateFeatureFlagSchema`, `createReportSchema`, `resolveReportSchema` ($\ge 10$ caracteres de notas) y `adminUpdatePlaceSchema`. |
-| `@exploro/business-rules` | Vitest | 30 (+3) | ✅ PASS | Regla de auditoría obligatoria (`validateAdminAuditRequest`), inmutabilidad absoluta de testimonios (`assertContentImmutability`) y validación de transiciones de estado de moderación (`evaluateModerationTransition`). |
-| `@exploro/api-client` | Vitest | 5 (+1) | ✅ PASS | Métodos administrativos tipados: `getAdminStats`, `listAuditLogs`, `listAdminUsers`, `updateUserRole`, `adminUpdatePlace`, `moderateReview`, `moderateEvidence`, `listAdminFeatureFlags`, `updateAdminFeatureFlag`, `createContentReport`, `listContentReports`, `resolveContentReport`, `listProcessingErrors` y `listAiModelsConfig`. |
-| `@exploro/api` (Fases 1–7) | Vitest + NestJS + PostGIS + Redis | 69 (+10) | ✅ PASS | 59 de fases anteriores + 10 pruebas de integración de Fase 7 (rechazo RBAC 403 a usuarios comunes, acceso autorizado a ADMIN, segmentación de permisos de MODERATOR, validación de motivo de auditoría $\ge 10$ caracteres, registro inmutable en `audit_logs`, inmutabilidad del texto del testimonio, corrección de coordenadas PostGIS, hot-reload de feature flags, reportes comunitarios y resolución, y métricas agregadas `/admin/stats`). |
-| `@exploro/web` | Vitest + Next.js 14 Build | 4 | ✅ PASS | Panel `AdminControlPanel` interactivo (Métricas, Feature Flags, Reportes, Auditoría Inmutable, Modelos de IA, Errores). Compilación limpia de producción (`next build` — 133 kB First Load JS). |
-| `@exploro/mobile` | Vitest + Expo + TypeScript | 10 | ✅ PASS | Pestaña `🗺️ Viajes`, verificación de bypass interno para testing, visualización de tarjetas de itinerario, modal de alternativas en 3 niveles y ajuste de horarios. |
-| `@exploro/admin` | Vitest | 5 (+3) | ✅ PASS | SDK y Servicio operativo `AdminDashboardService`, validación de auditoría inmutable e inmutabilidad de testimonios. |
+| `@exploro/validation` | Vitest | 24 | ✅ PASS | Validación de esquemas Zod (autenticación, lugares, itinerarios, experiencias nativas, administración y reportes). |
+| `@exploro/business-rules` | Vitest | 30 | ✅ PASS | Reglas deterministas de ranking, proximidad Haversine, alternativas en 3 niveles, auditoría obligatoria e inmutabilidad de testimonios. |
+| `@exploro/api-client` | Vitest | 5 | ✅ PASS | Cliente API HTTP con soporte para todos los módulos (Auth, Discovery, Experiences, Trips, Admin). |
+| `@exploro/api` (Fases 1–8) | Vitest + NestJS + PostGIS + Redis | 77 (+8) | ✅ PASS | 69 pruebas de Fases 1–7 + 8 pruebas de Fase 8: Inyección SQL neutralizada, mitigación XSS, rechazo JWT falsificado (401), PostGIS ST_DWithin < 80ms, caché Redis < 30ms, concurrencia 20 reqs sin deadlocks, FinOps bootstrap ($0.00) y consistencia transaccional en `audit_logs`. |
+| `@exploro/web` | Vitest + Next.js 14 Build | 4 | ✅ PASS | Panel `AdminControlPanel` y `TripPlannerPanel`. Compilación limpia de producción (`next build` — 133 kB First Load JS). |
+| `@exploro/mobile` | Vitest + Expo + TypeScript | 14 (+4) | ✅ PASS | Pestaña `🗺️ Viajes`, bypass interno para testing, gestión de almacenamiento offline con TTL, adaptabilidad para pantallas compactas/estándar/tablets, degradación elegante ante GPS denegado y validación de intervalo amigable con la batería. |
+| `@exploro/admin` | Vitest | 5 | ✅ PASS | SDK y Servicio operativo `AdminDashboardService`, validación de auditoría inmutable e inmutabilidad de testimonios. |
 | `services/ai-engine` (Docker) | Pytest + FastAPI TestClient | 8 | ✅ PASS | Extracción de aspectos para restaurantes y turismo, detección de precios/actividades y FinOps \$0.00. |
-| **TOTAL** | **Turborepo + Docker Compose** | **155** | **✅ 100% PASS** | **Cobertura integral de Fases 1, 2, 3, 4, 5, 6 y 7.** |
+| **TOTAL** | **Turborepo + Docker Compose** | **163** | **✅ 100% PASS** | **Cobertura integral de todas las Fases (1 a 8) del proyecto Exploro.** |
 
 ---
 
@@ -55,17 +55,58 @@
 
 ---
 
-## 3. Comandos de Verificación Automatizada
+## 3. Detalle de Pruebas de Integración y Seguridad de Fase 8 (`apps/api/src/phase8.security-perf.test.ts`)
+
+1. **Neutralización de Inyección SQL en Descubrimiento:**
+   - Envía payloads como `' OR 1=1 --`, `DROP TABLE`, y `UNION SELECT` en filtros y parámetros de búsqueda. La base de datos responde con arreglo vacío o resultados filtrados sin generar excepciones no controladas ni permitir escalamiento de privilegios.
+
+2. **Mitigación y Neutralización de XSS en Contenido de Usuario:**
+   - Envía tags `<script>` y payloads de eventos JavaScript en reseñas y reportes. La API almacena de forma segura y devuelve el contenido sin permitir ejecución ni inyección de código.
+
+3. **Rechazo Estricto de Tokens JWT Falsificados:**
+   - Tokens alterados en firma, expirados o con estructura ilegítima son rechazados inmediatamente con HTTP 401 Unauthorized sin fuga de información interna.
+
+4. **Benchmark de Latencia Espacial PostGIS (`ST_DWithin`):**
+   - Ejecuta consultas de descubrimiento espacial de alta densidad y confirma que el tiempo de ejecución en PostgreSQL/PostGIS es inferior a 80 ms.
+
+5. **Benchmark de Latencia en Caché Redis:**
+   - Valida que peticiones repetidas a los endpoints de lugares y categorías se resuelven directamente desde Redis en menos de 30 ms.
+
+6. **Estrés de Concurrencia de la API:**
+   - Ejecuta 20 solicitudes concurrentes sobre endpoints de descubrimiento sin pérdida de paquetes, sin fallas de memoria y con cero deadlocks en la conexión a la base de datos.
+
+7. **Verificación de Arquitectura Costo Cero ($0.00):**
+   - El endpoint de bootstrap de la API confirma de forma programática el uso de OpenStreetMap (`osm_free`), proveedores de geocodificación y ruteo gratuitos y moneda `USD` sin claves comerciales de pago.
+
+8. **Consistencia Transaccional Concurrente en Auditoría:**
+   - Acciones administrativas simultáneas sobre feature flags y entidades generan registros aislados, secuenciales e inmutables en `audit_logs`.
+
+---
+
+## 4. Pruebas Móviles de Resiliencia y Rendimiento (`apps/mobile/src/mobile.test.ts`)
+
+1. **Caché Offline y Recuperación Stale-while-Offline (`OfflineStorageManager`):**
+   - Almacena datos con TTL y retorna los registros cacheados cuando se desconecta la red.
+2. **Adaptabilidad Responsiva de Pantalla:**
+   - Clasifica y calcula columnas dinámicamente para teléfonos compactos (< 360dp), estándar (360-600dp) y tablets ($\ge 600\text{dp}$).
+3. **Degradación Elegante ante Fallo de Permisos de GPS:**
+   - Ante la denegación de permisos de ubicación, la app redirige fluidamente a la selección manual de ciudad sin crashear.
+4. **Protección de Batería:**
+   - Exige intervalos de actualización GPS de al menos 30 segundos, rechazando intervalos menores que agotarían la batería del usuario.
+
+---
+
+## 5. Comandos de Verificación Automatizada
 
 ```powershell
 # 1. Ejecutar pipeline completo de Turborepo (build, typecheck y tests)
 pnpm turbo run build typecheck test
 
-# 2. Ejecutar suite de pruebas de integración de Fase 7 en la API
-pnpm --filter @exploro/api test src/phase7.integration.test.ts
+# 2. Ejecutar suite de pruebas de seguridad y rendimiento de Fase 8 en la API
+pnpm --filter @exploro/api test src/phase8.security-perf.test.ts
 
-# 3. Ejecutar pruebas unitarias de gobernanza administrativa
-pnpm --filter @exploro/admin test
+# 3. Ejecutar pruebas unitarias de resiliencia móvil
+pnpm --filter @exploro/mobile test
 
 # 4. Ejecutar pruebas del motor de IA en Python
 docker exec exploro-ai-engine pytest

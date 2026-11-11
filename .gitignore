@@ -12,6 +12,7 @@ out/
 .expo/
 web-build/
 coverage/
+*.tsbuildinfo
 
 # Environment variables & Secrets (Never commit credentials)
 .env

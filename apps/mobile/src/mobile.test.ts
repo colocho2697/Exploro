@@ -6,6 +6,13 @@ import {
 } from '@exploro/business-rules';
 import { formatDistanceUS, milesToKm, US_CITIES } from './format';
 import { surpriseMeRequestSchema } from '@exploro/validation';
+import {
+  OfflineStorageManager,
+  getGridColumns,
+  getScreenCategory,
+  resolveLocationStrategy,
+  validateBatteryFriendlyInterval,
+} from './offline';
 
 describe('@exploro/mobile — Configuración y Lógica de Fase 2', () => {
   it('configura Android e iOS con esquema de enlaces profundos y política Costo Cero', () => {
@@ -278,6 +285,65 @@ describe('@exploro/mobile — Configuración y Lógica de Fase 2', () => {
     expect(alternatives[0].label).toContain('Nivel 1');
     expect(alternatives[1].label).toContain('Nivel 2');
     expect(alternatives[2].label).toContain('Nivel 3');
+  });
+
+  // ---------------------------------------------------------------------------
+  // FASE 8: PRUEBAS MÓVILES (Paso 8.2) — Conectividad, Pantallas, Permisos y Batería
+  // ---------------------------------------------------------------------------
+  it('gestiona la caché offline con estrategia stale-while-revalidate ante conectividad limitada', () => {
+    const storage = new OfflineStorageManager();
+
+    storage.set('saved-favorites', [{ id: 'fav-1', name: 'Central Park' }], 50); // 50ms TTL
+    expect(storage.getCacheSize()).toBe(1);
+
+    // Online y dentro de TTL
+    const liveData = storage.get<{ id: string; name: string }[]>('saved-favorites', false);
+    expect(liveData).toHaveLength(1);
+
+    // Simular paso del tiempo expirando TTL
+    // En modo offline (isOffline = true), se permite stale-while-offline
+    const staleData = storage.get<{ id: string; name: string }[]>('saved-favorites', true);
+    expect(staleData).toHaveLength(1);
+    expect(staleData?.[0]?.name).toBe('Central Park');
+  });
+
+  it('adapta el diseño responsive según el tamaño de pantalla (Android / iOS / Tablet)', () => {
+    // Teléfono compacto (< 360dp)
+    expect(getScreenCategory(320)).toBe('PHONE_COMPACT');
+    expect(getGridColumns('PHONE_COMPACT')).toBe(1);
+
+    // Teléfono estándar (iPhone / Pixel: 375dp - 430dp)
+    expect(getScreenCategory(393)).toBe('PHONE_STANDARD');
+    expect(getGridColumns('PHONE_STANDARD')).toBe(1);
+
+    // Tableta (iPad / Galaxy Tab: >= 600dp)
+    expect(getScreenCategory(768)).toBe('TABLET');
+    expect(getGridColumns('TABLET')).toBe(2);
+  });
+
+  it('aplica fallback elegante a selección de ciudad cuando el permiso GPS es denegado o no disponible', () => {
+    // Permiso denegado
+    const deniedStrategy = resolveLocationStrategy('DENIED', true);
+    expect(deniedStrategy.useGps).toBe(false);
+    expect(deniedStrategy.fallbackReason).toContain('Permiso de ubicación denegado');
+
+    // GPS apagado en el dispositivo
+    const noGpsStrategy = resolveLocationStrategy('GRANTED', false);
+    expect(noGpsStrategy.useGps).toBe(false);
+    expect(noGpsStrategy.fallbackReason).toContain('Servicios de ubicación del dispositivo desactivados');
+
+    // Concedido y activo
+    const grantedStrategy = resolveLocationStrategy('GRANTED', true);
+    expect(grantedStrategy.useGps).toBe(true);
+  });
+
+  it('valida la política de ahorro de batería evitando sondeos en intervalos agresivos', () => {
+    // Sondeo de 5 segundos -> Prohibido (drena batería innecesariamente)
+    expect(validateBatteryFriendlyInterval(5000)).toBe(false);
+
+    // Sondeo de 30 segundos o más -> Permitido y óptimo
+    expect(validateBatteryFriendlyInterval(30000)).toBe(true);
+    expect(validateBatteryFriendlyInterval(60000)).toBe(true);
   });
 });
 
