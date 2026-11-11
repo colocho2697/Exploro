@@ -221,6 +221,32 @@ export const detectDuplicatesQuerySchema = z.object({
   similarityThreshold: z.coerce.number().min(0.3).max(1.0).default(0.65),
 });
 
+// FASE 4: Esquemas de Aspectos, Explicaciones y Métricas de IA
+export const aspectPolaritySchema = z.enum(['POSITIVE', 'NEGATIVE', 'NEUTRAL']);
+
+export const extractAspectsBodySchema = z.object({
+  categorySlug: z.string().trim().min(2).max(60),
+  snippets: z.array(z.string().trim().min(3)).min(1, 'Se requiere al menos un fragmento para analizar'),
+});
+
+export const explainPlaceBodySchema = z.object({
+  placeId: z.string().uuid('Identificador de lugar inválido'),
+  placeName: z.string().trim().min(1),
+  categorySlug: z.string().trim().min(1),
+  evidences: z.array(
+    z.object({
+      evidence_id: z.string().min(1),
+      source_code: z.string().min(1),
+      snippet: z.string().trim().min(5),
+      confidence_score: z.number().min(0).max(1).default(0.85),
+    })
+  ),
+});
+
+export const recalculateAspectsSchema = z.object({
+  forceRefresh: z.boolean().default(false),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
@@ -238,5 +264,9 @@ export type GeoRouteInput = z.infer<typeof geoRouteSchema>;
 export type CreateSourceInput = z.infer<typeof createSourceSchema>;
 export type CreateEvidenceInput = z.infer<typeof createEvidenceSchema>;
 export type DetectDuplicatesQueryInput = z.infer<typeof detectDuplicatesQuerySchema>;
+export type ExtractAspectsBodyInput = z.infer<typeof extractAspectsBodySchema>;
+export type ExplainPlaceBodyInput = z.infer<typeof explainPlaceBodySchema>;
+export type RecalculateAspectsInput = z.infer<typeof recalculateAspectsSchema>;
+
 
 

@@ -4,6 +4,8 @@ import {
   createEvidenceSchema,
   createSourceSchema,
   discoverPlacesQuerySchema,
+  explainPlaceBodySchema,
+  extractAspectsBodySchema,
   geoAutocompleteQuerySchema,
   geoRouteSchema,
   registerSchema,
@@ -160,6 +162,51 @@ describe('@exploro/validation schemas', () => {
     });
     expect(invalidShort.success).toBe(false);
   });
+
+  it('valida la extracción de aspectos con lista de snippets (Fase 4)', () => {
+    const valid = extractAspectsBodySchema.parse({
+      categorySlug: 'comida',
+      snippets: [
+        'Masa crujiente y salsa de tomate fresco inigualable',
+        'La burrata slice es la mejor opción pero suele haber fila',
+      ],
+    });
+    expect(valid.categorySlug).toBe('comida');
+    expect(valid.snippets).toHaveLength(2);
+
+    const empty = extractAspectsBodySchema.safeParse({
+      categorySlug: 'comida',
+      snippets: [],
+    });
+    expect(empty.success).toBe(false);
+  });
+
+  it('valida el payload de generación de explicaciones anti-alucinación (Fase 4)', () => {
+    const valid = explainPlaceBodySchema.parse({
+      placeId: '77777777-7777-7777-7777-777777777701',
+      placeName: "L'Industrie Pizzeria",
+      categorySlug: 'comida',
+      evidences: [
+        {
+          evidence_id: 'ev-1',
+          source_code: 'INFATUATION_NYC',
+          snippet: 'La masa fermentada por 48 horas crea una textura crujiente.',
+          confidence_score: 0.95,
+        },
+      ],
+    });
+    expect(valid.placeName).toBe("L'Industrie Pizzeria");
+    expect(valid.evidences[0].confidence_score).toBe(0.95);
+
+    const invalidUuid = explainPlaceBodySchema.safeParse({
+      placeId: 'not-a-uuid',
+      placeName: 'Test Place',
+      categorySlug: 'comida',
+      evidences: [],
+    });
+    expect(invalidUuid.success).toBe(false);
+  });
 });
+
 
 

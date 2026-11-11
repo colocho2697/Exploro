@@ -13,8 +13,8 @@
 | **Fase 1** | Construcción de los Fundamentos | ✅ **Completada y Validada (29/29 tests)** | Monorepo operativo, Docker (PostGIS+Redis+MinIO+AI Engine), esquema BD inicial EE. UU., Auth JWT + Modo Invitado, UI inicial («Estoy de viaje» / «Soy local — próximamente»). |
 | **Fase 2** | Sistema de Descubrimiento | ✅ **Completada y Aprobada (61/61 tests)** | Catálogo completo, Categorías dinámicas, Búsqueda PostGIS con mapa MapLibre `$0`, Tarjetas con evidencias, Favoritos, Colecciones, «Sorpréndeme», Preferencias activables. |
 | **Fase 3** | Integración de Mapas y Fuentes | ✅ **Completada y Validada (82/82 tests)** | OpenFreeMap / MapLibre GL `$0`, Autocompletado y Geocodificación PostGIS/Redis, Cálculo de Rutas sin costo, Conectores legales de fuentes, Sistema de Evidencias y Deduplicación segura. |
-| **Fase 4** | Motor de Inteligencia y Recomendaciones | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Extracción de aspectos en Python/FastAPI, Motor de Ranking determinista + explicable, Guardián anti-alucinaciones, Optimización y métricas de costo IA. |
-| **Fase 5** | Sistema de Experiencias Propias | ⚪ Pendiente | Flujo «Comenzar actividad», cuestionarios cortos adaptados (Restaurantes/Turismo), verificación opcional (GPS/QR), integración al ranking. |
+| **Fase 4** | Motor de Inteligencia y Recomendaciones | ✅ **Completada y Validada (97/97 tests)** | Extracción de aspectos en Python/FastAPI ($0.00), Motor de Ranking determinista + explicable, Guardián anti-alucinaciones, Métricas FinOps de IA. |
+| **Fase 5** | Sistema de Experiencias Propias | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Flujo «Comenzar actividad», cuestionarios cortos adaptados (Restaurantes/Turismo), verificación opcional (GPS/QR), integración al ranking. |
 | **Fase 6** | Planificador de Viajes (Oculto) | ⚪ Pendiente | Protegido por Feature Flag: itinerarios manuales y asistidos, flexibilidad horaria (0/15/30/60m), edición inteligente en 3 niveles, reorganización con confirmación. |
 | **Fase 7** | Administración y Control | ⚪ Pendiente | Panel Admin (`apps/admin`), moderación de evidencias/duplicados, gestión de feature flags y métricas de IA, auditoría inmutable (`audit_logs`). |
 | **Fase 8** | Pruebas, Optimización y Lanzamiento | ⚪ Pendiente | Suite completa E2E/Seguridad/Rendimiento, optimización móvil y de costos, compilación Android/iOS/Web y despliegue progresivo. |
@@ -244,6 +244,50 @@
 - **Criterios de aceptación:**
   - Web: Dibujado de rutas GeoJSON sobre MapLibre GL, autocompletado en barra de búsqueda y botón de trazado de ruta en el detalle del lugar.
   - Mobile: Autocompletado en tiempo real, modal de ruta paso a paso ("🚗 Cómo llegar") con distancias en millas y tiempos de viaje, y badges de evidencias auditables. *(Completado)*
+
+---
+
+## Desglose Detallado — FASE 4: Motor de Inteligencia y Recomendaciones (✅ Completada)
+
+> **Estado:** Todas las tareas de la Fase 4 han sido implementadas, probadas al 100% (`23/23` tareas de Turborepo, `97/97` pruebas automatizadas, builds de producción limpios).
+
+### Tarea 4.1 — Procesamiento de Opiniones y Clasificación de Aspectos en `services/ai-engine`
+- **Objetivo:** Implementar la taxonomía oficial de aspectos para comida y turismo, detectando aspectos positivos, negativos, menciones de precios y actividades sugeridas.
+- **Archivos involucrados:** `services/ai-engine/app/main.py`, `services/ai-engine/tests/test_ai_engine.py`.
+- **Criterios de aceptación:**
+  - `POST /internal/v1/opinions/extract-aspects`: Taxonomía para comida (*Sabor y calidad, Atención y servicio, Relación calidad-precio, Ambiente y comodidad, Porciones abundantes, Especialidades*) y turismo (*Experiencia y vista, Accesibilidad, Duración, Costo y gratuidad, Seguridad, Valor cultural, Recomendación imperdible*).
+  - Detección de críticas y advertencias (*Largas filas y espera, Lugar abarrotado, Precios elevados, Atención mejorable*).
+  - 8 pruebas de `pytest` superadas al 100% sin costo de API por token ($0.00). *(Completado)*
+
+### Tarea 4.2 — Guardián Anti-Alucinaciones y Generación de Explicaciones Transparentes
+- **Objetivo:** Generar explicaciones fundamentadas exclusivamente en evidencias reales y bloquear alucinaciones.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `services/ai-engine/app/main.py`.
+- **Criterios de aceptación:**
+  - `verifyAntiHallucination`: Verificación multifactorial (existencia del lugar, respaldo textual obligatorio de aspectos, detección de contradicciones, marcado como `INSUFFICIENT_DATA` si no hay evidencias).
+  - `resolveSafeRecommendationReason`: Mensaje transparente *"Evidencia limitada: aún estamos recopilando más experiencias verificadas para este lugar."* cuando no hay respaldo. *(Completado)*
+
+### Tarea 4.3 — Motor de Ranking Determinista y Explicable
+- **Objetivo:** Calcular la reputación y confianza de un lugar sin depender de estrellas de terceros ni de la discrecionalidad de un LLM.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `packages/shared-types/src/index.ts`.
+- **Criterios de aceptación:**
+  - `calculateDeterministicPlaceScore`: Fórmula determinista que pondera confianza de evidencias, decaimiento por antigüedad, consistencia entre opiniones y diversidad de fuentes. *(Completado)*
+
+### Tarea 4.4 — Módulo de Recomendaciones y Métricas FinOps en Backend NestJS
+- **Objetivo:** Orquestar el motor de recomendaciones, persistir aspectos en `place_scores`, gestionar caché en Redis y auditar costos.
+- **Archivos involucrados:** `apps/api/src/modules/recommendations/*`, `apps/api/src/phase4.integration.test.ts`.
+- **Criterios de aceptación:**
+  - `GET /places/:placeId/recommendation-summary`: Retorna el resumen con score, nivel de confianza, explicación auditada y aspectos respaldados, con caché Redis.
+  - `POST /places/:placeId/recalculate-aspects`: Extracción y actualización determinista en base de datos.
+  - `GET /ai/metrics`: Auditoría de solicitudes, aspectos extraídos, alucinaciones bloqueadas y costo total de operación ($0.00).
+  - 6 pruebas de integración pasando en `phase4.integration.test.ts` (42 pruebas totales de API). *(Completado)*
+
+### Tarea 4.5 — Experiencia Visual de Recomendaciones en Web y Mobile
+- **Objetivo:** Presentar las recomendaciones y aspectos explicables al viajero con total transparencia.
+- **Archivos involucrados:** `apps/web/src/components/PlaceDetail.tsx`, `apps/mobile/App.tsx`, `apps/mobile/src/mobile.test.ts`.
+- **Criterios de aceptación:**
+  - Web: Bloque de recomendación en detalle de lugar con badge de puntuación, explicación verificada, chips de aspectos positivos/negativos y sello de auditoría.
+  - Mobile: Tarjeta de recomendación inteligente en modal con aspectos positivos, advertencias de viajeros y política de costo cero. *(Completado)*
+
 
 
 

@@ -445,4 +445,69 @@ export interface DuplicateCandidateDTO {
   reason: string;
 }
 
+// ---------------------------------------------------------------------------
+// FASE 4: Motor de Inteligencia y Recomendaciones
+// ---------------------------------------------------------------------------
+
+export type AspectPolarity = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+
+export interface ExtractedAspectItem {
+  aspect: string;
+  category: string;
+  polarity: AspectPolarity;
+  mentionsCount: number;
+  sampleQuotes: string[];
+  confidence: number;
+}
+
+export interface ExtractAspectsRequest {
+  categorySlug: string;
+  snippets: string[];
+}
+
+export interface ExtractAspectsResponse {
+  positiveAspects: ExtractedAspectItem[];
+  negativeAspects: ExtractedAspectItem[];
+  detectedPrices: string[];
+  recommendedActivities: string[];
+  tokensProcessed: number;
+  costUsd: number;
+}
+
+export interface PlaceRecommendationSummary {
+  placeId: string;
+  overallScore: number;
+  confidenceLevel: ConfidenceLevel;
+  explanation: string;
+  explanationStatus: DataAvailabilityStatus;
+  topPositiveAspects: ExtractedAspectItem[];
+  topNegativeAspects: ExtractedAspectItem[];
+  sourceDiversityCount: number;
+  independentCount: number;
+  agreementRatio: number;
+  factCheckPassed: boolean;
+  costUsd: number;
+  calculatedAt: string;
+}
+
+export interface RecalculateAspectsResponse {
+  placeId: string;
+  updatedScore: number;
+  explanationStatus: DataAvailabilityStatus;
+  positiveAspectsCount: number;
+  negativeAspectsCount: number;
+  evidencesProcessed: number;
+}
+
+export interface AiFinOpsMetrics {
+  totalRequests: number;
+  aspectsExtracted: number;
+  explanationsGenerated: number;
+  hallucinationsBlocked: number;
+  totalCostUsd: number;
+  averageLatencyMs: number;
+  costPolicy: 'ZERO_COST_USD_0';
+}
+
+
 

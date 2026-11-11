@@ -25,6 +25,8 @@ import { EvidencesService } from './modules/evidences/evidences.service';
 import { EvidencesController } from './modules/evidences/evidences.controller';
 import { NormalizationService } from './modules/normalization/normalization.service';
 import { NormalizationController } from './modules/normalization/normalization.controller';
+import { RecommendationsService } from './modules/recommendations/recommendations.service';
+import { RecommendationsController } from './modules/recommendations/recommendations.controller';
 
 @Catch()
 export class GlobalApiExceptionFilter implements ExceptionFilter {
@@ -71,6 +73,7 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     SourcesController,
     EvidencesController,
     NormalizationController,
+    RecommendationsController,
   ],
   providers: [
     DatabaseService,
@@ -82,6 +85,7 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     SourcesService,
     EvidencesService,
     NormalizationService,
+    RecommendationsService,
     {
       provide: APP_FILTER,
       useClass: GlobalApiExceptionFilter,

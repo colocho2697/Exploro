@@ -71,6 +71,8 @@ services:
       AI_DEFAULT_MODEL: ${AI_DEFAULT_MODEL:-qwen2.5:7b}
     ports:
       - "${AI_ENGINE_PORT:-8000}:8000"
+    volumes:
+      - ../../services/ai-engine:/app
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s

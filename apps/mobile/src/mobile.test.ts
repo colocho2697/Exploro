@@ -127,4 +127,48 @@ describe('@exploro/mobile — Configuración y Lógica de Fase 2', () => {
     const driveMinutes = Math.round((distMeters * 1.25) / 583);
     expect(walkMinutes).toBeGreaterThan(driveMinutes);
   });
+
+  it('procesa el resumen de recomendación con IA y aspectos estructurados para móvil (Fase 4)', () => {
+    const mockRecSummary = {
+      placeId: '77777777-7777-7777-7777-777777777701',
+      overallScore: 91.4,
+      confidenceLevel: 'HIGH' as const,
+      explanation: "L'Industrie Pizzeria destaca según 2 fuentes por sabor de la masa y calidad-precio.",
+      explanationStatus: 'CONFIRMED' as const,
+      topPositiveAspects: [
+        {
+          aspect: 'Sabor y calidad',
+          category: 'comida',
+          polarity: 'POSITIVE' as const,
+          mentionsCount: 2,
+          sampleQuotes: ['Masa crujiente y salsa fresca.'],
+          confidence: 0.95,
+        },
+      ],
+      topNegativeAspects: [
+        {
+          aspect: 'Largas filas y espera',
+          category: 'comida',
+          polarity: 'NEGATIVE' as const,
+          mentionsCount: 1,
+          sampleQuotes: ['Fila de 15 minutos.'],
+          confidence: 0.8,
+        },
+      ],
+      sourceDiversityCount: 2,
+      independentCount: 2,
+      agreementRatio: 0.9,
+      factCheckPassed: true,
+      costUsd: 0.0,
+      calculatedAt: new Date().toISOString(),
+    };
+
+    expect(mockRecSummary.overallScore).toBeGreaterThan(80);
+    expect(mockRecSummary.confidenceLevel).toBe('HIGH');
+    expect(mockRecSummary.factCheckPassed).toBe(true);
+    expect(mockRecSummary.costUsd).toBe(0.0);
+    expect(mockRecSummary.topPositiveAspects[0]?.aspect).toBe('Sabor y calidad');
+    expect(mockRecSummary.topNegativeAspects[0]?.aspect).toBe('Largas filas y espera');
+  });
 });
+

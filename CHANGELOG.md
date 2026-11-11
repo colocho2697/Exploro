@@ -4,6 +4,31 @@ Todos los cambios importantes en la arquitectura, código, base de datos y docum
 
 ---
 
+## [0.5.0] — 2026-11-11 (Fase 4: Motor de Inteligencia y Recomendaciones Completada)
+
+### Agregado
+- **Taxonomía y Procesamiento de Opiniones en `services/ai-engine` (Python + FastAPI)**:
+  - `POST /internal/v1/opinions/extract-aspects`: Extracción estructurada de aspectos positivos (*Sabor y calidad, Atención y servicio, Relación calidad-precio, Ambiente y comodidad, Porciones abundantes, Especialidades* para restaurantes; *Experiencia y vista, Accesibilidad, Duración, Costo y gratuidad, Seguridad, Valor cultural, Recomendación imperdible* para turismo).
+  - Detección de advertencias y críticas (*Largas filas y espera, Lugar abarrotado o ruidoso, Precios elevados, Atención mejorable*).
+  - Extracción automática de precios detectados y actividades recomendadas sin costos de API por token ($0.00).
+- **Guardián Anti-Alucinaciones (`FactCheckerGuard` y `verifyAntiHallucination`)**:
+  - Verificación estricta de afirmaciones contra evidencias textuales registradas en `packages/business-rules`.
+  - Tratamiento transparente de información faltante (`INSUFFICIENT_DATA`), devolviendo avisos explícitos de evidencia limitada sin inventar datos.
+- **Motor de Ranking Determinista y Explicable (`calculateDeterministicPlaceScore`)**:
+  - Ponderación matemática de evidencias por confianza, decaimiento suave por antigüedad (media vida ~2 años), consistencia de opiniones y diversidad de fuentes.
+- **Módulo de Recomendaciones en Backend (`apps/api/src/modules/recommendations/`)**:
+  - `GET /places/:placeId/recommendation-summary`: Consulta del resumen explicable con score, confianza, explicación y aspectos respaldados, con caché Redis.
+  - `POST /places/:placeId/recalculate-aspects`: Recálculo y actualización determinista en base de datos `place_scores`.
+  - `GET /ai/metrics`: Auditoría FinOps de solicitudes, aspectos extraídos, alucinaciones bloqueadas y costo total ($0.00).
+  - 6 pruebas de integración e2e en `phase4.integration.test.ts` (42 pruebas totales de API).
+- **Experiencia de Usuario en Web y Móvil (`apps/web` y `apps/mobile`)**:
+  - Web: Bloque explicable en modal de detalle de lugar con badge de puntuación, chips de aspectos positivos, advertencias de viajeros y sello de auditoría.
+  - Mobile: Tarjeta de recomendación inteligente en modal con aspectos positivos, advertencias y política de costo cero.
+- **Pruebas y Verificación Global**:
+  - Total global: **97 pruebas automatizadas pasando (100% Green)** y 23/23 tareas exitosas en Turborepo.
+
+---
+
 ## [0.4.0] — 2026-11-11 (Fase 3: Integración de Mapas y Fuentes Completada)
 
 ### Agregado

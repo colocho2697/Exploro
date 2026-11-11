@@ -1,4 +1,5 @@
 import {
+  AiFinOpsMetrics,
   ApiResponse,
   AppBootstrapConfig,
   AuthSessionResponse,
@@ -14,6 +15,8 @@ import {
   HealthStatusResponse,
   PlaceCardDTO,
   PlaceDetailDTO,
+  PlaceRecommendationSummary,
+  RecalculateAspectsResponse,
   RouteSummary,
   SourceDTO,
   SourceSyncResult,
@@ -350,5 +353,38 @@ export class ExploroApiClient {
     );
     return res.data;
   }
+
+  // -------------------------------------------------------------------------
+  // FASE 4: Motor de Inteligencia, Recomendaciones y Métricas
+  // -------------------------------------------------------------------------
+
+  public async getPlaceRecommendationSummary(
+    placeId: string
+  ): Promise<PlaceRecommendationSummary> {
+    const res = await this.request<PlaceRecommendationSummary>(
+      `/places/${encodeURIComponent(placeId)}/recommendation-summary`
+    );
+    return res.data;
+  }
+
+  public async recalculatePlaceAspects(
+    placeId: string,
+    forceRefresh = false
+  ): Promise<RecalculateAspectsResponse> {
+    const res = await this.request<RecalculateAspectsResponse>(
+      `/places/${encodeURIComponent(placeId)}/recalculate-aspects`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ forceRefresh }),
+      }
+    );
+    return res.data;
+  }
+
+  public async getAiMetrics(): Promise<AiFinOpsMetrics> {
+    const res = await this.request<AiFinOpsMetrics>('/ai/metrics');
+    return res.data;
+  }
 }
+
 

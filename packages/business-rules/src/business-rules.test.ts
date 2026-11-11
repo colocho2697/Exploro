@@ -14,7 +14,9 @@ import {
   resolveSafeRecommendationReason,
   selectSurpriseSuggestions,
   SurpriseCandidate,
+  synthesizeAspectSummaries,
   tiersAboveBudget,
+  verifyAntiHallucination,
 } from './index';
 
 const candidate = (over: Partial<SurpriseCandidate>): SurpriseCandidate => ({
@@ -327,6 +329,78 @@ describe('@exploro/business-rules', () => {
       expect(externalNoDate).toBe(0.75);
     });
   });
+
+  describe('Fase 4 — Extracción de Aspectos y Guardián Anti-Alucinaciones', () => {
+    it('sintetiza aspectos positivos, negativos y precios a partir de evidencias reales', () => {
+      const snippets = [
+        'Masa crujiente y salsa de tomate fresco, el sabor es auténtico y delicioso.',
+        'La porción es generosa y el precio de $4.50 por rebanada vale totalmente la pena.',
+        'Suele haber una fila larga y espera de 30 minutos en horas punta.',
+        'Recomiendo probar la slice de burrata con miel picante.',
+      ];
+
+      const result = synthesizeAspectSummaries({
+        categorySlug: 'comida',
+        snippets,
+      });
+
+      expect(result.positiveAspects.length).toBeGreaterThan(0);
+      const aspectNames = result.positiveAspects.map((a) => a.aspect);
+      expect(aspectNames).toContain('Sabor y calidad');
+      expect(aspectNames).toContain('Relación calidad-precio');
+      expect(aspectNames).toContain('Porciones abundantes');
+
+      // Aspectos negativos
+      expect(result.negativeAspects.length).toBeGreaterThan(0);
+      expect(result.negativeAspects[0].aspect).toBe('Largas filas y espera');
+
+      // Precios detectados
+      expect(result.detectedPrices).toContain('$4.50');
+
+      // Actividades recomendadas
+      expect(result.recommendedActivities.length).toBeGreaterThan(0);
+    });
+
+    it('guardián anti-alucinaciones aprueba si los aspectos están respaldados y rechaza hechos inventados', () => {
+      const rawSnippets = [
+        'Increíble vista panorámica del skyline al atardecer, es una experiencia hermosa y gratis.',
+      ];
+
+      // Caso 1: Todo respaldado
+      const valid = verifyAntiHallucination({
+        placeExists: true,
+        explanation: 'El mirador destaca por su vista panorámica según testimonios.',
+        evidencesCount: 2,
+        claimedAspects: ['Experiencia y vista', 'Costo y gratuidad'],
+        rawSnippets,
+      });
+      expect(valid.passed).toBe(true);
+      expect(valid.status).toBe('CONFIRMED');
+
+      // Caso 2: Aspecto no respaldado (alucinación)
+      const hallucinated = verifyAntiHallucination({
+        placeExists: true,
+        explanation: 'Destaca por su menú gastronómico de mariscos frescos.',
+        evidencesCount: 2,
+        claimedAspects: ['Gastronomía marina gourmet'],
+        rawSnippets,
+      });
+      expect(hallucinated.passed).toBe(false);
+      expect(hallucinated.reason).toContain('no tiene respaldo');
+
+      // Caso 3: 0 evidencias -> INSUFFICIENT_DATA
+      const zeroData = verifyAntiHallucination({
+        placeExists: true,
+        explanation: null,
+        evidencesCount: 0,
+        claimedAspects: [],
+        rawSnippets: [],
+      });
+      expect(zeroData.passed).toBe(true);
+      expect(zeroData.status).toBe('INSUFFICIENT_DATA');
+    });
+  });
 });
+
 
 

@@ -25,6 +25,7 @@ import {
   ExplorationMode,
   PlaceCardDTO,
   PlaceDetailDTO,
+  PlaceRecommendationSummary,
   PlaceSortBy,
   RouteSummary,
   SurpriseSuggestionDTO,
@@ -66,6 +67,7 @@ export default function App(): React.JSX.Element {
   // Detalle de lugar y ruta
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [placeDetail, setPlaceDetail] = useState<PlaceDetailDTO | null>(null);
+  const [recSummary, setRecSummary] = useState<PlaceRecommendationSummary | null>(null);
   const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
   const [routeInfo, setRouteInfo] = useState<RouteSummary | null>(null);
   const [routeLoading, setRouteLoading] = useState<boolean>(false);
@@ -164,9 +166,14 @@ export default function App(): React.JSX.Element {
     setSelectedPlaceId(idOrSlug);
     setLoadingDetail(true);
     setRouteInfo(null);
+    setRecSummary(null);
     try {
       const detail = await client.getPlaceBySlug(idOrSlug);
       setPlaceDetail(detail);
+      client
+        .getPlaceRecommendationSummary(detail.id)
+        .then((s) => setRecSummary(s))
+        .catch(() => {});
     } catch {
       setErrorNotice('No fue posible obtener los detalles del lugar.');
     } finally {
@@ -178,6 +185,7 @@ export default function App(): React.JSX.Element {
     setSelectedPlaceId(null);
     setPlaceDetail(null);
     setRouteInfo(null);
+    setRecSummary(null);
   };
 
   // Calcular ruta sin costo ($0.00)
@@ -861,10 +869,50 @@ export default function App(): React.JSX.Element {
                   </View>
                 ) : null}
 
-                {/* Evidencia de recomendación */}
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>Por qué lo recomendamos</Text>
-                  <Text style={styles.placeReason}>{placeDetail.recommendationReason}</Text>
+                {/* Recomendación Explicable y Aspectos Verificados (Fase 4) */}
+                <View style={styles.aiCard}>
+                  <View style={styles.aiCardHeader}>
+                    <Text style={styles.aiCardTitle}>🧠 Recomendación Explicable</Text>
+                    <Text style={styles.aiScoreBadge}>
+                      {recSummary ? `${Math.round(recSummary.overallScore)}/100` : `${Math.round(placeDetail.scoreSummary.overallScore)}/100`}
+                    </Text>
+                  </View>
+                  <Text style={styles.aiExplanationText}>
+                    {recSummary?.explanation || placeDetail.recommendationReason}
+                  </Text>
+
+                  {/* Chips de Aspectos Positivos */}
+                  {recSummary && recSummary.topPositiveAspects.length > 0 ? (
+                    <View style={styles.aspectsRow}>
+                      {recSummary.topPositiveAspects.map((asp) => (
+                        <View key={asp.aspect} style={styles.positiveAspectChip}>
+                          <Text style={styles.positiveAspectText}>
+                            ✨ {asp.aspect} {asp.mentionsCount > 1 ? `(${asp.mentionsCount})` : ''}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {/* Chips de Advertencias */}
+                  {recSummary && recSummary.topNegativeAspects.length > 0 ? (
+                    <View style={styles.aspectsRow}>
+                      {recSummary.topNegativeAspects.map((asp) => (
+                        <View key={asp.aspect} style={styles.negativeAspectChip}>
+                          <Text style={styles.negativeAspectText}>⚠️ {asp.aspect}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  <View style={styles.aiCardFooter}>
+                    <Text style={styles.aiAuditText}>
+                      {recSummary?.factCheckPassed
+                        ? '✅ Respaldado por evidencias'
+                        : '⚠️ Información en verificación'}
+                    </Text>
+                    <Text style={styles.aiCostText}>Costo IA: $0.00</Text>
+                  </View>
                 </View>
 
                 {/* Actividades disponibles */}
@@ -1490,6 +1538,89 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   evidenceMeta: {
+    color: '#64748b',
+    fontSize: 11,
+  },
+  aiCard: {
+    backgroundColor: '#131c31',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a5f',
+    padding: 14,
+    marginTop: 14,
+    gap: 8,
+  },
+  aiCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aiCardTitle: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  aiScoreBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    color: '#38bdf8',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    fontWeight: '700',
+    fontSize: 12,
+    overflow: 'hidden',
+  },
+  aiExplanationText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  aspectsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  positiveAspectChip: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+  },
+  positiveAspectText: {
+    color: '#6ee7b7',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  negativeAspectChip: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+  },
+  negativeAspectText: {
+    color: '#fca5a5',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  aiCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+    paddingTop: 6,
+    marginTop: 4,
+  },
+  aiAuditText: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  aiCostText: {
     color: '#64748b',
     fontSize: 11,
   },

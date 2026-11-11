@@ -35,6 +35,18 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  public async del(key: string): Promise<void> {
+    try {
+      await this.client.del(key);
+    } catch {
+      // Ignora fallo en borrado de caché
+    }
+  }
+
+  public async delete(key: string): Promise<void> {
+    return this.del(key);
+  }
+
   public async checkHealth(): Promise<boolean> {
     try {
       const pong = await this.client.ping();

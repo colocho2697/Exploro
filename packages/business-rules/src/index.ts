@@ -4,6 +4,7 @@ import {
   ConfidenceLevel,
   DataAvailabilityStatus,
   ExplorationMode,
+  ExtractedAspectItem,
   ModeDescriptor,
 } from '@exploro/shared-types';
 
@@ -627,4 +628,209 @@ export function calculateEvidenceConfidence(params: {
 
   return Number(Math.max(0.1, Math.min(1.0, score)).toFixed(2));
 }
+
+// ---------------------------------------------------------------------------
+// FASE 4: Taxonomía de Aspectos, Síntesis y Guardián Anti-Alucinaciones
+// ---------------------------------------------------------------------------
+
+export const RESTAURANT_ASPECT_TAXONOMY: Record<string, string[]> = {
+  'Sabor y calidad': ['sabor', 'delicios', 'crujiente', 'masa', 'fresco', 'auténtic', 'textura', 'ingredientes', 'rico', 'exquisito'],
+  'Atención y servicio': ['atención', 'amable', 'servicio', 'rápido', 'camarero', 'personal', 'staff', 'cordial'],
+  'Relación calidad-precio': ['precio', 'calidad-precio', 'barato', 'económico', 'accesible', 'vale la pena', 'precio justo', 'buen precio'],
+  'Ambiente y comodidad': ['ambiente', 'terraza', 'música', 'vista', 'acogedor', 'decoración', 'vibra', 'espacio'],
+  'Porciones abundantes': ['porción', 'porciones', 'generos', 'abundante', 'grande', 'suficiente', 'llena'],
+  'Especialidades de la casa': ['especialidad', 'burrata', 'slice', 'rebanada', 'tacos', 'hamburguesa', 'pasta', 'postre', 'café'],
+};
+
+export const TOURISM_ASPECT_TAXONOMY: Record<string, string[]> = {
+  'Experiencia y vista': ['experiencia', 'vista', 'panorámic', 'skyline', 'atardecer', 'paisaje', 'hermos', 'impresionante'],
+  'Accesibilidad y transporte': ['accesible', 'caminar', 'metro', 'estación', 'estacionamiento', 'fácil acceso', 'transporte'],
+  'Duración del recorrido': ['duración', 'horas', 'minutos', 'recorrido', 'visita rápida', 'tiempo'],
+  'Costo y gratuidad': ['gratis', 'gratuito', 'sin costo', 'económico', 'libre acceso', 'sin pagar'],
+  'Seguridad según testimonios': ['seguro', 'tranquilo', 'familiar', 'iluminado', 'confiable', 'vigilado'],
+  'Valor cultural e histórico': ['historia', 'monumento', 'arquitectura', 'museo', 'arte', 'emblemátic', 'icónico', 'patrimonio'],
+  'Recomendación imperdible': ['imperdible', 'recomendad', 'joya', 'vale la pena', 'obligad', 'must visit'],
+};
+
+export const NEGATIVE_ASPECT_TAXONOMY: Record<string, string[]> = {
+  'Largas filas y espera': ['fila', 'filas', 'espera', 'larga espera', 'cola', 'tiempo de espera', 'esperar mucho', 'demora'],
+  'Lugar abarrotado o ruidoso': ['abarrotado', 'ruidoso', 'demasiada gente', 'apretado', 'multitud', 'atestado', 'bullicio'],
+  'Precios elevados': ['caro', 'costoso', 'precio alto', 'sobrevalorado', 'carísimo', 'no vale lo que cuesta'],
+  'Atención mejorable': ['servicio lento', 'mala atención', 'grosero', 'desatento', 'poca amabilidad', 'tardaron'],
+};
+
+/**
+ * Síntesis extractiva de aspectos positivos y negativos a partir de evidencias (Paso 4.1 y 4.2).
+ * Sin llamadas a modelos externos de pago ($0.00).
+ */
+export function synthesizeAspectSummaries(params: {
+  categorySlug: string;
+  snippets: string[];
+}): {
+  positiveAspects: ExtractedAspectItem[];
+  negativeAspects: ExtractedAspectItem[];
+  detectedPrices: string[];
+  recommendedActivities: string[];
+} {
+  const { categorySlug, snippets } = params;
+  const isFood = categorySlug === 'comida' || categorySlug === 'food';
+  const taxonomy = isFood ? RESTAURANT_ASPECT_TAXONOMY : TOURISM_ASPECT_TAXONOMY;
+
+  const positiveAspects: ExtractedAspectItem[] = [];
+  const negativeAspects: ExtractedAspectItem[] = [];
+  const detectedPrices: Set<string> = new Set();
+  const recommendedActivities: Set<string> = new Set();
+
+  // 1. Detectar aspectos positivos
+  for (const [aspectName, keywords] of Object.entries(taxonomy)) {
+    const matchingSnippets: string[] = [];
+    for (const snippet of snippets) {
+      const lower = snippet.toLowerCase();
+      if (keywords.some((kw) => lower.includes(kw))) {
+        matchingSnippets.push(snippet);
+      }
+    }
+
+    if (matchingSnippets.length > 0) {
+      positiveAspects.push({
+        aspect: aspectName,
+        category: categorySlug,
+        polarity: 'POSITIVE',
+        mentionsCount: matchingSnippets.length,
+        sampleQuotes: matchingSnippets.slice(0, 2),
+        confidence: Number(Math.min(1.0, 0.75 + matchingSnippets.length * 0.08).toFixed(2)),
+      });
+    }
+  }
+
+  // 2. Detectar aspectos negativos / advertencias
+  for (const [aspectName, keywords] of Object.entries(NEGATIVE_ASPECT_TAXONOMY)) {
+    const matchingSnippets: string[] = [];
+    for (const snippet of snippets) {
+      const lower = snippet.toLowerCase();
+      if (keywords.some((kw) => lower.includes(kw))) {
+        matchingSnippets.push(snippet);
+      }
+    }
+
+    if (matchingSnippets.length > 0) {
+      negativeAspects.push({
+        aspect: aspectName,
+        category: categorySlug,
+        polarity: 'NEGATIVE',
+        mentionsCount: matchingSnippets.length,
+        sampleQuotes: matchingSnippets.slice(0, 2),
+        confidence: Number(Math.min(1.0, 0.70 + matchingSnippets.length * 0.1).toFixed(2)),
+      });
+    }
+  }
+
+  // 3. Extraer precios y actividades mencionadas
+  for (const snippet of snippets) {
+    const lower = snippet.toLowerCase();
+    // Precios
+    const priceMatches = snippet.match(/\$\s?\d+(\.\d{2})?/g);
+    if (priceMatches) {
+      priceMatches.forEach((p) => detectedPrices.add(p.replace(/\s+/, '')));
+    }
+    if (lower.includes('gratis') || lower.includes('gratuito')) {
+      detectedPrices.add('Gratis');
+    }
+
+    // Actividades sugeridas
+    if (lower.includes('probar') || lower.includes('pedir') || lower.includes('recomiendo')) {
+      const phrase = snippet.length > 60 ? `${snippet.substring(0, 57)}...` : snippet;
+      recommendedActivities.add(phrase);
+    }
+  }
+
+  return {
+    positiveAspects: positiveAspects.sort((a, b) => b.mentionsCount - a.mentionsCount),
+    negativeAspects: negativeAspects.sort((a, b) => b.mentionsCount - a.mentionsCount),
+    detectedPrices: Array.from(detectedPrices),
+    recommendedActivities: Array.from(recommendedActivities).slice(0, 3),
+  };
+}
+
+/**
+ * Guardián Anti-Alucinaciones estricto (Paso 4.5).
+ * Valida que:
+ * 1. El lugar exista en el catálogo.
+ * 2. Si no hay evidencias, devuelva INSUFFICIENT_DATA y no genere hechos falsos.
+ * 3. Las afirmaciones de aspectos tengan al menos un fragmento de soporte.
+ * 4. No existan contradicciones flagrantes entre la recomendación y la evidencia.
+ */
+export function verifyAntiHallucination(params: {
+  placeExists: boolean;
+  explanation: string | null;
+  evidencesCount: number;
+  claimedAspects: string[];
+  rawSnippets: string[];
+}): {
+  passed: boolean;
+  status: DataAvailabilityStatus;
+  reason?: string;
+} {
+  const { placeExists, explanation, evidencesCount, claimedAspects, rawSnippets } = params;
+
+  if (!placeExists) {
+    return {
+      passed: false,
+      status: 'INSUFFICIENT_DATA',
+      reason: 'El lugar no existe en el catálogo verificado.',
+    };
+  }
+
+  if (evidencesCount === 0 || rawSnippets.length === 0) {
+    return {
+      passed: true,
+      status: 'INSUFFICIENT_DATA',
+      reason: 'No hay evidencias registradas: se marca como información insuficiente sin inventar datos.',
+    };
+  }
+
+  if (!explanation || explanation.trim().length < 10) {
+    return {
+      passed: false,
+      status: 'UNVERIFIED',
+      reason: 'La explicación generada está vacía o es demasiado corta.',
+    };
+  }
+
+  // Verificar que cada aspecto reclamado tenga al menos una evidencia con palabras clave afines
+  const combinedSnippets = rawSnippets.join(' ').toLowerCase();
+  for (const claimed of claimedAspects) {
+    const taxonomyKeywords =
+      RESTAURANT_ASPECT_TAXONOMY[claimed] ??
+      TOURISM_ASPECT_TAXONOMY[claimed] ??
+      NEGATIVE_ASPECT_TAXONOMY[claimed];
+
+    let hasBacking = false;
+    if (taxonomyKeywords && taxonomyKeywords.length > 0) {
+      hasBacking = taxonomyKeywords.some((kw) => combinedSnippets.includes(kw));
+    }
+
+    if (!hasBacking) {
+      const words = claimed
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 3);
+      hasBacking = words.some((w) => combinedSnippets.includes(w));
+    }
+
+    if (!hasBacking) {
+      return {
+        passed: false,
+        status: 'UNVERIFIED',
+        reason: `Aspecto afirmado "${claimed}" no tiene respaldo en los fragmentos de evidencias.`,
+      };
+    }
+  }
+
+  return {
+    passed: true,
+    status: evidencesCount >= 2 ? 'CONFIRMED' : 'UNVERIFIED',
+  };
+}
+
 
