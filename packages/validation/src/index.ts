@@ -152,6 +152,75 @@ export const createCollectionSchema = z.object({
   isPublic: z.boolean().default(false),
 });
 
+export const sourceTypeSchema = z.enum([
+  'EXTERNAL_COMMUNITY',
+  'BLOG',
+  'NATIVE_EXPERIENCE',
+  'CURATED',
+]);
+
+export const evidenceTypeSchema = z.enum([
+  'OPINION',
+  'GUIDE',
+  'REVIEW',
+  'MENTION',
+]);
+
+export const routeModeSchema = z.enum(['driving', 'walking']);
+
+export const geoAutocompleteQuerySchema = z.object({
+  q: z.string().trim().min(1, 'El término de búsqueda es requerido').max(100),
+  citySlug: z.string().trim().min(1).optional(),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  limit: z.coerce.number().int().min(1).max(20).default(8),
+});
+
+export const geoReverseQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+});
+
+export const geoRouteSchema = z.object({
+  origin: coordinatesSchema,
+  destination: coordinatesSchema,
+  mode: routeModeSchema.default('driving'),
+});
+
+export const createSourceSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(2)
+    .max(60)
+    .regex(/^[A-Z0-9_]+$/, 'El código debe contener solo mayúsculas, números y guiones bajos'),
+  name: z.string().trim().min(2).max(120),
+  sourceType: sourceTypeSchema,
+  baseTrustWeight: z.number().min(0.05).max(1.0).default(0.8),
+  feedUrl: z.string().trim().url().optional().or(z.literal('')),
+});
+
+export const createEvidenceSchema = z.object({
+  placeId: z.string().uuid('Identificador de lugar inválido'),
+  sourceCode: z.string().trim().min(2).max(60),
+  externalUrl: z.string().trim().url('URL externa inválida').nullable().optional(),
+  extractedSnippet: z
+    .string()
+    .trim()
+    .min(5, 'El fragmento de evidencia debe tener al menos 5 caracteres')
+    .max(2000, 'El fragmento no puede superar 2000 caracteres'),
+  evidenceType: evidenceTypeSchema.default('OPINION'),
+  sentimentScore: z.number().min(0).max(1).default(0.5),
+  confidenceScore: z.number().min(0).max(1).default(0.8),
+  publishedAt: z.string().datetime().nullable().optional(),
+});
+
+export const detectDuplicatesQuerySchema = z.object({
+  placeId: z.string().uuid().optional(),
+  radiusMeters: z.coerce.number().min(5).max(10000).default(300),
+  similarityThreshold: z.coerce.number().min(0.3).max(1.0).default(0.65),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
@@ -163,4 +232,11 @@ export type SurpriseMeRequestInput = z.infer<typeof surpriseMeRequestSchema>;
 export type CreateCollectionInput = z.infer<typeof createCollectionSchema>;
 export type UpdateCollectionInput = z.infer<typeof updateCollectionSchema>;
 export type AddCollectionItemInput = z.infer<typeof addCollectionItemSchema>;
+export type GeoAutocompleteQueryInput = z.infer<typeof geoAutocompleteQuerySchema>;
+export type GeoReverseQueryInput = z.infer<typeof geoReverseQuerySchema>;
+export type GeoRouteInput = z.infer<typeof geoRouteSchema>;
+export type CreateSourceInput = z.infer<typeof createSourceSchema>;
+export type CreateEvidenceInput = z.infer<typeof createEvidenceSchema>;
+export type DetectDuplicatesQueryInput = z.infer<typeof detectDuplicatesQuerySchema>;
+
 

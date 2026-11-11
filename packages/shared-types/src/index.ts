@@ -336,3 +336,113 @@ export interface ApiResponse<T> {
   };
 }
 
+// ---------------------------------------------------------------------------
+// FASE 3: Contratos Geográficos (Mapas, Autocomplete, Rutas sin costo)
+// ---------------------------------------------------------------------------
+
+export interface AutocompleteSuggestion {
+  id: string;
+  title: string;
+  subtitle: string;
+  placeId?: string;
+  city?: string;
+  coordinates: Coordinates;
+  type: 'place' | 'city' | 'address';
+}
+
+export interface RouteStep {
+  instruction: string;
+  distanceMeters: number;
+  durationSeconds: number;
+}
+
+export interface RouteSummary {
+  distanceMeters: number;
+  distanceMiles: number;
+  durationMinutes: number;
+  mode: 'driving' | 'walking';
+  geometryGeoJSON?: {
+    type: 'LineString';
+    coordinates: [number, number][]; // [lng, lat]
+  };
+  steps: RouteStep[];
+}
+
+export interface GeoAddress {
+  formatted: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+}
+
+// ---------------------------------------------------------------------------
+// FASE 3: Sistema de Fuentes, Evidencias y Deduplicación
+// ---------------------------------------------------------------------------
+
+export type SourceSyncStatus = 'SUCCESS' | 'RATE_LIMITED' | 'ERROR' | 'IDLE';
+
+export interface SourceDTO {
+  id: string;
+  code: string;
+  name: string;
+  sourceType: SourceType;
+  baseTrustWeight: number;
+  isActive: boolean;
+  feedUrl?: string | null;
+  lastSyncedAt?: string | null;
+  totalEvidencesCount?: number;
+  createdAt: string;
+}
+
+export interface SourceSyncResult {
+  sourceId: string;
+  sourceCode: string;
+  status: SourceSyncStatus;
+  itemsFetched: number;
+  evidencesIngested: number;
+  duplicatesSkipped: number;
+  message?: string;
+}
+
+export interface CreateSourceDTO {
+  code: string;
+  name: string;
+  sourceType: SourceType;
+  baseTrustWeight?: number;
+  feedUrl?: string;
+}
+
+export interface CreateEvidenceDTO {
+  placeId: string;
+  sourceCode: string;
+  externalUrl?: string | null;
+  extractedSnippet: string;
+  evidenceType?: EvidenceType;
+  sentimentScore?: number;
+  confidenceScore?: number;
+  publishedAt?: string | null;
+}
+
+export interface DuplicateCandidateDTO {
+  placeA: {
+    id: string;
+    name: string;
+    slug: string;
+    cityName: string;
+    coordinates: Coordinates;
+  };
+  placeB: {
+    id: string;
+    name: string;
+    slug: string;
+    cityName: string;
+    coordinates: Coordinates;
+  };
+  nameSimilarity: number;
+  distanceMeters: number;
+  action: 'AUTO_MERGE' | 'MANUAL_REVIEW' | 'DISTINCT';
+  reason: string;
+}
+
+

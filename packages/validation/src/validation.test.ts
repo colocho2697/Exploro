@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   coordinatesSchema,
+  createEvidenceSchema,
+  createSourceSchema,
   discoverPlacesQuerySchema,
+  geoAutocompleteQuerySchema,
+  geoRouteSchema,
   registerSchema,
   surpriseMeRequestSchema,
   updatePreferencesSchema,
@@ -102,5 +106,60 @@ describe('@exploro/validation schemas', () => {
     expect(surprise.budgetTier).toBe('LOW');
     expect(surprise.companionType).toBe('COUPLE');
   });
+
+  it('valida consultas de autocomplete y ruteo para mapas de costo cero (Fase 3)', () => {
+    const autocomplete = geoAutocompleteQuerySchema.parse({
+      q: 'Central Park',
+      limit: '10',
+    });
+    expect(autocomplete.q).toBe('Central Park');
+    expect(autocomplete.limit).toBe(10);
+
+    const route = geoRouteSchema.parse({
+      origin: { lat: 40.7128, lng: -74.006 },
+      destination: { lat: 40.7829, lng: -73.9654 },
+      mode: 'driving',
+    });
+    expect(route.origin.lat).toBe(40.7128);
+    expect(route.mode).toBe('driving');
+  });
+
+  it('valida el registro de fuentes externas legales y rechaza códigos no estándar', () => {
+    const validSource = createSourceSchema.parse({
+      code: 'REDDIT_AUSTIN_FOOD',
+      name: 'Reddit Austin Food & Drinks',
+      sourceType: 'EXTERNAL_COMMUNITY',
+      baseTrustWeight: 0.85,
+    });
+    expect(validSource.code).toBe('REDDIT_AUSTIN_FOOD');
+    expect(validSource.baseTrustWeight).toBe(0.85);
+
+    const invalidSource = createSourceSchema.safeParse({
+      code: 'bad code with spaces',
+      name: 'Test',
+      sourceType: 'BLOG',
+    });
+    expect(invalidSource.success).toBe(false);
+  });
+
+  it('valida la ingesta de evidencias y restringe identificadores y longitudes', () => {
+    const evidence = createEvidenceSchema.parse({
+      placeId: '77777777-7777-7777-7777-777777777701',
+      sourceCode: 'REDDIT_US_FOOD',
+      extractedSnippet: 'Excelente pizza de masa madre en West Village por menos de $15.',
+      evidenceType: 'OPINION',
+      confidenceScore: 0.9,
+    });
+    expect(evidence.placeId).toBe('77777777-7777-7777-7777-777777777701');
+    expect(evidence.confidenceScore).toBe(0.9);
+
+    const invalidShort = createEvidenceSchema.safeParse({
+      placeId: '77777777-7777-7777-7777-777777777701',
+      sourceCode: 'REDDIT_US_FOOD',
+      extractedSnippet: 'Ok', // muy corto (< 5)
+    });
+    expect(invalidShort.success).toBe(false);
+  });
 });
+
 

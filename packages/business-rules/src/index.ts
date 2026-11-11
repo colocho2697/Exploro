@@ -420,3 +420,211 @@ export function selectSurpriseSuggestions(
   }
   return picked;
 }
+
+// ---------------------------------------------------------------------------
+// FASE 3: Normalización, Deduplicación y Confiabilidad de Evidencias
+// ---------------------------------------------------------------------------
+
+/**
+ * Normaliza el nombre de un lugar eliminando acentos, puntuación, mayúsculas
+ * y sufijos corporativos comunes para comparar entidades de diferentes fuentes.
+ */
+export function normalizePlaceName(rawName: string): string {
+  if (!rawName) return '';
+
+  let normalized = rawName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Elimina marcas diacríticas
+    .toLowerCase()
+    .replace(/['’".,/#!$%^&*;:{}=\-_`~()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Elimina sufijos corporativos comunes en EE. UU.
+  normalized = normalized
+    .replace(/\b(llc|inc|corp|co|ltd|restaurant|bar|cafe)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return normalized;
+}
+
+/**
+ * Calcula la similitud de trigramas (coeficiente Sørensen-Dice) entre dos textos,
+ * equivalente al operador % / función similarity() de pg_trgm en PostgreSQL.
+ */
+export function calculateTrigramSimilarity(a: string, b: string): number {
+  const normA = normalizePlaceName(a);
+  const normB = normalizePlaceName(b);
+
+  if (normA === normB) return 1.0;
+  if (!normA || !normB) return 0.0;
+
+  const getTrigrams = (str: string): Map<string, number> => {
+    const padded = `  ${str} `;
+    const trigrams = new Map<string, number>();
+    for (let i = 0; i < padded.length - 2; i++) {
+      const tri = padded.substring(i, i + 3);
+      trigrams.set(tri, (trigrams.get(tri) ?? 0) + 1);
+    }
+    return trigrams;
+  };
+
+  const triA = getTrigrams(normA);
+  const triB = getTrigrams(normB);
+
+  let matches = 0;
+  let totalA = 0;
+  let totalB = 0;
+
+  for (const count of triA.values()) totalA += count;
+  for (const count of triB.values()) totalB += count;
+
+  for (const [tri, countA] of triA.entries()) {
+    const countB = triB.get(tri);
+    if (countB) {
+      matches += Math.min(countA, countB);
+    }
+  }
+
+  if (totalA + totalB === 0) return 0.0;
+  return Number(((2 * matches) / (totalA + totalB)).toFixed(4));
+}
+
+/**
+ * Calcula la distancia ortodrómica en metros entre dos coordenadas (Fórmula Haversine).
+ */
+export function calculateHaversineDistanceMeters(
+  coordA: { lat: number; lng: number },
+  coordB: { lat: number; lng: number }
+): number {
+  const R = 6371000; // Radio de la Tierra en metros
+  const dLat = ((coordB.lat - coordA.lat) * Math.PI) / 180;
+  const dLng = ((coordB.lng - coordA.lng) * Math.PI) / 180;
+  const lat1 = (coordA.lat * Math.PI) / 180;
+  const lat2 = (coordB.lat * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(R * c);
+}
+
+export interface DuplicateEvaluation {
+  isDuplicate: boolean;
+  nameSimilarity: number;
+  distanceMeters: number;
+  action: 'AUTO_MERGE' | 'MANUAL_REVIEW' | 'DISTINCT';
+  reason: string;
+}
+
+/**
+ * Regla de Negocio (Paso 3.4 y Principio #1):
+ * No fusionar automáticamente registros cuando exista ambigüedad.
+ * Solo fusiona de forma autónoma con certeza geográfica y nominal alta.
+ */
+export function evaluatePlaceDuplicate(params: {
+  nameA: string;
+  coordsA: { lat: number; lng: number };
+  nameB: string;
+  coordsB: { lat: number; lng: number };
+}): DuplicateEvaluation {
+  const { nameA, coordsA, nameB, coordsB } = params;
+
+  const distanceMeters = calculateHaversineDistanceMeters(coordsA, coordsB);
+  const similarity = calculateTrigramSimilarity(nameA, nameB);
+
+  // Mismo lugar exacto: distancia insignificante (< 25 metros) y nombres prácticamente idénticos
+  if (distanceMeters <= 25 && similarity >= 0.9) {
+    return {
+      isDuplicate: true,
+      nameSimilarity: similarity,
+      distanceMeters,
+      action: 'AUTO_MERGE',
+      reason: 'Ubicación casi exacta (<25 m) y coincidencia nominal >= 90%.',
+    };
+  }
+
+  // Zona ambigua: nombres muy similares a menos de 250 metros o idénticos a menos de 500 metros
+  if (
+    (distanceMeters <= 250 && similarity >= 0.65) ||
+    (distanceMeters <= 500 && similarity >= 0.85)
+  ) {
+    return {
+      isDuplicate: true,
+      nameSimilarity: similarity,
+      distanceMeters,
+      action: 'MANUAL_REVIEW',
+      reason:
+        'Ambigüedad detectada: proximidad geográfica con similitud moderada. Requiere revisión para evitar fusión errónea.',
+    };
+  }
+
+  // Lugares distintos
+  return {
+    isDuplicate: false,
+    nameSimilarity: similarity,
+    distanceMeters,
+    action: 'DISTINCT',
+    reason: 'Distancia o nombres difieren lo suficiente para considerarse independientes.',
+  };
+}
+
+/**
+ * Genera un hash criptográfico determinista (FNV-1a 64-bit expandido a 64 hex chars)
+ * para evitar registros duplicados de evidencias sin dependencias nativas de Node.
+ */
+export function generateEvidenceContentHash(
+  sourceCode: string,
+  externalUrl: string | null | undefined,
+  snippet: string
+): string {
+  const payload = `${sourceCode.trim()}|${(externalUrl ?? '').trim()}|${snippet.trim()}`;
+
+  // Dos hashes FNV-1a de 32 bits con semillas distintas para 64 bits de entropía
+  let h1 = 0x811c9dc5;
+  let h2 = 0x811c9dc5 ^ 0x55555555;
+
+  for (let i = 0; i < payload.length; i++) {
+    const code = payload.charCodeAt(i);
+    h1 ^= code;
+    h1 = Math.imul(h1, 0x01000193) >>> 0;
+
+    h2 ^= code;
+    h2 = Math.imul(h2, 0x01000193) >>> 0;
+  }
+
+  const hex1 = h1.toString(16).padStart(8, '0');
+  const hex2 = h2.toString(16).padStart(8, '0');
+  const rawPrefix = `ev_${hex1}${hex2}`;
+
+  // Rellena hasta 64 caracteres de forma determinista para ajustarse a VARCHAR(64)
+  return (rawPrefix + hex1.repeat(4) + hex2.repeat(2)).substring(0, 64);
+}
+
+/**
+ * Calcula el nivel de confianza de una evidencia según su origen y atributos verificables.
+ */
+export function calculateEvidenceConfidence(params: {
+  baseTrustWeight: number;
+  hasPublishedAt: boolean;
+  hasExternalUrl: boolean;
+  isNativeReview?: boolean;
+}): number {
+  let score = params.baseTrustWeight;
+
+  if (params.isNativeReview) {
+    score = 0.95;
+  }
+  if (params.hasPublishedAt) {
+    score += 0.04;
+  }
+  if (params.hasExternalUrl) {
+    score += 0.04;
+  }
+
+  return Number(Math.max(0.1, Math.min(1.0, score)).toFixed(2));
+}
+

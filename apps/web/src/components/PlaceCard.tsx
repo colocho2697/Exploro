@@ -16,6 +16,7 @@ interface Props {
   onToggleFavorite: (place: PlaceCardDTO) => void;
   onAddToCollection: (collectionId: string, place: PlaceCardDTO) => void;
   onRequireLogin: () => void;
+  onCalculateRoute?: (coords: { lat: number; lng: number }, name: string) => void;
   highlight?: boolean;
 }
 
@@ -28,6 +29,7 @@ export function PlaceCard({
   onToggleFavorite,
   onAddToCollection,
   onRequireLogin,
+  onCalculateRoute,
   highlight,
 }: Props): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
@@ -144,7 +146,13 @@ export function PlaceCard({
         )}
       </div>
 
-      {expanded && <PlaceDetail client={client} slug={place.slug} />}
+      {expanded && (
+        <PlaceDetail
+          client={client}
+          slug={place.slug}
+          onCalculateRoute={onCalculateRoute}
+        />
+      )}
     </article>
   );
 }

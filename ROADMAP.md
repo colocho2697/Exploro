@@ -11,9 +11,9 @@
 | :--- | :--- | :--- | :--- |
 | **Fase 0** | Análisis del Entorno y Planificación | ✅ **Completada y Aprobada** | Diagnóstico, Arquitectura, Modelo de Datos, Estrategia de Costo Cero (`$0.00`) y Plan aprobados. |
 | **Fase 1** | Construcción de los Fundamentos | ✅ **Completada y Validada (29/29 tests)** | Monorepo operativo, Docker (PostGIS+Redis+MinIO+AI Engine), esquema BD inicial EE. UU., Auth JWT + Modo Invitado, UI inicial («Estoy de viaje» / «Soy local — próximamente»). |
-| **Fase 2** | Sistema de Descubrimiento | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Catálogo completo, Categorías dinámicas, Búsqueda PostGIS con mapa MapLibre `$0`, Tarjetas con evidencias, Favoritos, Colecciones, «Sorpréndeme», Preferencias activables. |
-| **Fase 3** | Integración de Mapas y Fuentes | ⚪ Pendiente | Google Maps (Android/iOS/Web con control de costos), Conectores legales de fuentes, Sistema de Evidencias, Deduplicación segura. |
-| **Fase 4** | Motor de Inteligencia y Recomendaciones | ⚪ Pendiente | Extracción de aspectos en Python/FastAPI, Motor de Ranking determinista + explicable, Guardián anti-alucinaciones, Optimización y métricas de costo IA. |
+| **Fase 2** | Sistema de Descubrimiento | ✅ **Completada y Aprobada (61/61 tests)** | Catálogo completo, Categorías dinámicas, Búsqueda PostGIS con mapa MapLibre `$0`, Tarjetas con evidencias, Favoritos, Colecciones, «Sorpréndeme», Preferencias activables. |
+| **Fase 3** | Integración de Mapas y Fuentes | ✅ **Completada y Validada (82/82 tests)** | OpenFreeMap / MapLibre GL `$0`, Autocompletado y Geocodificación PostGIS/Redis, Cálculo de Rutas sin costo, Conectores legales de fuentes, Sistema de Evidencias y Deduplicación segura. |
+| **Fase 4** | Motor de Inteligencia y Recomendaciones | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Extracción de aspectos en Python/FastAPI, Motor de Ranking determinista + explicable, Guardián anti-alucinaciones, Optimización y métricas de costo IA. |
 | **Fase 5** | Sistema de Experiencias Propias | ⚪ Pendiente | Flujo «Comenzar actividad», cuestionarios cortos adaptados (Restaurantes/Turismo), verificación opcional (GPS/QR), integración al ranking. |
 | **Fase 6** | Planificador de Viajes (Oculto) | ⚪ Pendiente | Protegido por Feature Flag: itinerarios manuales y asistidos, flexibilidad horaria (0/15/30/60m), edición inteligente en 3 niveles, reorganización con confirmación. |
 | **Fase 7** | Administración y Control | ⚪ Pendiente | Panel Admin (`apps/admin`), moderación de evidencias/duplicados, gestión de feature flags y métricas de IA, auditoría inmutable (`audit_logs`). |
@@ -199,5 +199,51 @@
 ### Tarea 2.8 — Verificación Global y Documentación de Cierre de Fase 2
 - **Objetivo:** Ejecutar pipeline completo de monorepo (`turbo run build typecheck test`), actualizar documentación de arquitectura, base de datos, roadmap, testing y changelog.
 - **Criterios de aceptación:** Cero errores en monorepo, 57 pruebas automatizadas pasando, listo para revisión del usuario. *(Completado)*
+
+---
+
+## Desglose Detallado — FASE 3: Integración de Mapas y Fuentes (✅ Completada)
+
+> **Estado:** Todas las tareas de la Fase 3 han sido implementadas, verificadas al 100% (`23/23` tareas de Turborepo, `82/82` pruebas automatizadas, builds de producción limpios).
+
+### Tarea 3.1 — Servicios Geoespaciales Costo Cero ($0.00): Autocompletado, Geocodificación Inversa y Rutas
+- **Objetivo:** Implementar endpoints geoespaciales sin dependencia de APIs de pago comerciales (Google Maps / Mapbox APIs).
+- **Archivos involucrados:** `apps/api/src/modules/geo/*`, `packages/shared-types/src/index.ts`, `packages/validation/src/index.ts`, `packages/business-rules/src/index.ts`.
+- **Criterios de aceptación:**
+  - `GET /geo/autocomplete`: Búsqueda de prefijos y similitud trigram (`pg_trgm`) en PostGIS sobre ciudades y lugares en EE. UU., con caché en Redis.
+  - `GET /geo/reverse`: Geocodificación inversa mediante operador de distancia espacial `<->` de PostGIS con caché en Redis.
+  - `POST /geo/route`: Cálculo determinista de rutas (distancia, duración en modos `driving` / `walking` / `cycling`, pasos paso a paso y geometría GeoJSON `LineString`).
+  - Pruebas de integración pasando al 100%. *(Completado)*
+
+### Tarea 3.2 — Registro y Sincronización de Fuentes de Datos
+- **Objetivo:** Gestionar fuentes de información de terceros y de la comunidad de forma ética, legal y auditable.
+- **Archivos involucrados:** `apps/api/src/modules/sources/*`, `packages/validation/src/index.ts`.
+- **Criterios de aceptación:**
+  - `GET /sources`: Listado de fuentes autorizadas con contadores de evidencias.
+  - `POST /sources`: Registro controlado de fuentes con validación de código único y tipo de fuente (`OFFICIAL_OPEN_DATA`, `EDITORIAL_BLOG`, `COMMUNITY_FORUM`, `SOCIAL_MEDIA`, `DIRECT_PARTNER`).
+  - `POST /sources/:id/sync`: Pipeline de sincronización que genera evidencias con hash determinista (`content_hash`) para evitar duplicaciones. *(Completado)*
+
+### Tarea 3.3 — Sistema de Ingestión de Evidencias Auditables
+- **Objetivo:** Ingesta de testimonios, reseñas públicas y datos verificables asociados a lugares, con cálculo transparente de confianza y recálculo determinista de scores.
+- **Archivos involucrados:** `apps/api/src/modules/evidences/*`, `packages/business-rules/src/index.ts`.
+- **Criterios de aceptación:**
+  - `GET /places/:placeId/evidences`: Listado paginado y ordenado por confianza y fecha de evidencias de un lugar.
+  - `POST /evidences`: Ingestión con hashing determinista SHA-256 / FNV-1a para descartar duplicados y recálculo automático e inmutable de la reputación en `place_scores`. *(Completado)*
+
+### Tarea 3.4 — Normalización de Nombres y Deduplicación Segura de Lugares
+- **Objetivo:** Evitar la duplicación de lugares generada por múltiples fuentes de datos sin fusionar erróneamente lugares distintos.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `apps/api/src/modules/normalization/*`.
+- **Criterios de aceptación:**
+  - `normalizePlaceName`: Normalización de caracteres, tildes, minúsculas y eliminación de sufijos corporativos comunes (`llc`, `inc`, `restaurant`).
+  - `evaluatePlaceDuplicate`: Detección en 3 niveles: `<25m` & `>=0.90` -> `AUTO_MERGE`; `<250m` & `>=0.65` o `<500m` & `>=0.85` -> `MANUAL_REVIEW`; de lo contrario `NO_DUPLICATE`. Nunca se fusiona en caso de ambigüedad.
+  - `GET /normalization/duplicates`: Detección espacial PostGIS `ST_DWithin` + `pg_trgm` con clasificación estricta de candidatos. *(Completado)*
+
+### Tarea 3.5 — Integración de Mapas y Rutas en Clientes Web y Móvil
+- **Objetivo:** Visualización de rutas y evidencias en MapLibre GL (Web) y Expo (Mobile).
+- **Archivos involucrados:** `apps/web/src/components/MapView.tsx`, `apps/web/src/components/FiltersBar.tsx`, `apps/web/src/components/PlaceDetail.tsx`, `apps/web/src/app/page.tsx`, `apps/mobile/App.tsx`, `apps/mobile/src/mobile.test.ts`.
+- **Criterios de aceptación:**
+  - Web: Dibujado de rutas GeoJSON sobre MapLibre GL, autocompletado en barra de búsqueda y botón de trazado de ruta en el detalle del lugar.
+  - Mobile: Autocompletado en tiempo real, modal de ruta paso a paso ("🚗 Cómo llegar") con distancias en millas y tiempos de viaje, y badges de evidencias auditables. *(Completado)*
+
 
 

@@ -17,6 +17,14 @@ import { CatalogService } from './modules/catalog/catalog.service';
 import { CatalogController } from './modules/catalog/catalog.controller';
 import { LibraryService } from './modules/library/library.service';
 import { LibraryController } from './modules/library/library.controller';
+import { GeoService } from './modules/geo/geo.service';
+import { GeoController } from './modules/geo/geo.controller';
+import { SourcesService } from './modules/sources/sources.service';
+import { SourcesController } from './modules/sources/sources.controller';
+import { EvidencesService } from './modules/evidences/evidences.service';
+import { EvidencesController } from './modules/evidences/evidences.controller';
+import { NormalizationService } from './modules/normalization/normalization.service';
+import { NormalizationController } from './modules/normalization/normalization.controller';
 
 @Catch()
 export class GlobalApiExceptionFilter implements ExceptionFilter {
@@ -59,6 +67,10 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     AuthController,
     CatalogController,
     LibraryController,
+    GeoController,
+    SourcesController,
+    EvidencesController,
+    NormalizationController,
   ],
   providers: [
     DatabaseService,
@@ -66,6 +78,10 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     AuthService,
     CatalogService,
     LibraryService,
+    GeoService,
+    SourcesService,
+    EvidencesService,
+    NormalizationService,
     {
       provide: APP_FILTER,
       useClass: GlobalApiExceptionFilter,

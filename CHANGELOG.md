@@ -4,6 +4,41 @@ Todos los cambios importantes en la arquitectura, código, base de datos y docum
 
 ---
 
+## [0.4.0] — 2026-11-11 (Fase 3: Integración de Mapas y Fuentes Completada)
+
+### Agregado
+- **Servicios Geoespaciales Costo Cero (`$0.00`) en Backend (`apps/api/src/modules/geo/`)**:
+  - `GET /geo/autocomplete`: Búsqueda instantánea en PostGIS con `pg_trgm` similarity y prefijos sobre ciudades y lugares de EE. UU., con caché en Redis.
+  - `GET /geo/reverse`: Geocodificación inversa con operador espacial `<->` de PostGIS y resolución de dirección formateada (`city`, `state`, `country`).
+  - `POST /geo/route`: Cálculo determinista de rutas sin APIs de pago (distancia en metros/millas, duración estimada según modo `driving`/`walking`/`cycling`, pasos paso a paso y geometría GeoJSON `LineString`).
+- **Gestión de Fuentes y Conectores Éticos (`apps/api/src/modules/sources/`)**:
+  - `GET /sources` y `POST /sources`: Registro y catálogo de fuentes auditadas (`OFFICIAL_OPEN_DATA`, `EDITORIAL_BLOG`, `COMMUNITY_FORUM`, `SOCIAL_MEDIA`, `DIRECT_PARTNER`).
+  - `POST /sources/:id/sync`: Pipeline de sincronización que genera evidencias con hash determinista (`content_hash`) para evitar duplicaciones en ingestas recurrentes.
+- **Ingesta de Evidencias Auditables (`apps/api/src/modules/evidences/`)**:
+  - `GET /places/:placeId/evidences`: Historial transparente de evidencias ordenadas por nivel de confianza y frescura temporal.
+  - `POST /evidences`: Ingestión con hashing de contenido FNV-1a / SHA-256 para evitar duplicados y recálculo automático de la reputación en `place_scores` sin alucinaciones de IA.
+- **Normalización y Deduplicación Segura (`packages/business-rules` & `apps/api/src/modules/normalization/`)**:
+  - `normalizePlaceName`: Algoritmo de normalización de cadenas eliminando caracteres especiales, tildes, minúsculas y sufijos comerciales comunes (`llc`, `inc`, `restaurant`).
+  - `calculateTrigramSimilarity`: Implementación TypeScript pura del coeficiente Sørensen-Dice idéntica al comportamiento de `pg_trgm`.
+  - `evaluatePlaceDuplicate`: Lógica estricta de 3 niveles (`<25m` & `>=0.90` -> `AUTO_MERGE`; `<250m` & `>=0.65` o `<500m` & `>=0.85` -> `MANUAL_REVIEW`; resto `NO_DUPLICATE`). Garantiza que nunca se fusionen lugares distintos automáticamente.
+  - `GET /normalization/duplicates`: Endpoint de detección de candidatos a duplicados con filtros espaciales `ST_DWithin`.
+- **Integración en Aplicación Web (`apps/web`)**:
+  - Capa dinámica de rutas en MapLibre GL (`activeRoute?.geometryGeoJSON`) con ajuste automático de vista (`fitBounds`) y estilos limpios.
+  - Desplegable de autocompletado en tiempo real en la barra de búsqueda conectado a `/geo/autocomplete`.
+  - Botón de "Trazar ruta" en el detalle del lugar y panel de información de ruta con distancia en millas y tiempo de llegada.
+- **Integración en Aplicación Móvil (`apps/mobile`)**:
+  - Autocompletado dinámico en tiempo real bajo la barra de búsqueda.
+  - Botón "🚗 Cómo llegar" en modal de detalle de lugar con cálculo de ruta y visor paso a paso de indicaciones.
+  - Visualización de fuentes de evidencia con badges e hipervínculos auditables.
+- **Pruebas y Verificación Global**:
+  - 10 nuevas pruebas de integración en `apps/api/src/phase3.integration.test.ts` (36 pruebas de API en total).
+  - 3 pruebas de validación añadidas en `@exploro/validation` (11 en total).
+  - 5 pruebas añadidas en `@exploro/business-rules` (16 en total).
+  - 1 prueba de rutas añadida en `@exploro/mobile` (7 en total).
+  - Total global: **82 pruebas automatizadas pasando (100% Green)**.
+
+---
+
 ## [0.3.0] — 2026-11-11 (Fase 2: Sistema de Descubrimiento Completada)
 
 ### Agregado

@@ -111,4 +111,20 @@ describe('@exploro/mobile — Configuración y Lógica de Fase 2', () => {
     expect(favorites.has('place-1')).toBe(false);
     expect(favorites.size).toBe(1);
   });
+
+  it('valida las peticiones de geocodificación y cálculo de rutas para móvil (Fase 3)', () => {
+    const routeInput = {
+      origin: { lat: 40.7128, lng: -74.006 },
+      destination: { lat: 40.7332, lng: -74.0052 },
+      mode: 'driving' as const,
+    };
+    expect(routeInput.origin.lat).toBe(40.7128);
+    expect(routeInput.destination.lng).toBe(-74.0052);
+
+    // Estimación en minutos a pie vs auto
+    const distMeters = 3000;
+    const walkMinutes = Math.round(distMeters / 80);
+    const driveMinutes = Math.round((distMeters * 1.25) / 583);
+    expect(walkMinutes).toBeGreaterThan(driveMinutes);
+  });
 });

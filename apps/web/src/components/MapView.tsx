@@ -3,23 +3,34 @@
 import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Coordinates, PlaceCardDTO } from '@exploro/shared-types';
+import { Coordinates, PlaceCardDTO, RouteSummary } from '@exploro/shared-types';
 import { MAP_STYLE_URL } from '../lib/api';
 
 interface Props {
   places: PlaceCardDTO[];
   userLocation: Coordinates | null;
   fallbackCenter: Coordinates | null;
+  activeRoute?: RouteSummary | null;
   onSelectPlace: (slug: string) => void;
 }
 
 const US_CENTER: Coordinates = { lat: 39.5, lng: -98.35 };
+
+const CATEGORY_COLORS: Record<string, string> = {
+  comida: '#f97316',
+  turismo: '#0ea5e9',
+  actividades: '#10b981',
+  entretenimiento: '#8b5cf6',
+  eventos: '#ec4899',
+  compras: '#eab308',
+};
 
 /** Mapa MapLibre GL con estilo OpenFreeMap (OpenStreetMap): sin API key ni costo. */
 export default function MapView({
   places,
   userLocation,
   fallbackCenter,
+  activeRoute,
   onSelectPlace,
 }: Props): React.JSX.Element {
   const container = useRef<HTMLDivElement | null>(null);
@@ -66,15 +77,19 @@ export default function MapView({
     const bounds = new maplibregl.LngLatBounds();
 
     for (const place of places) {
+      const color = CATEGORY_COLORS[place.categorySlug] ?? '#0ea5e9';
       const el = document.createElement('button');
       el.type = 'button';
       el.setAttribute('aria-label', `Ver ${place.name}`);
-      el.style.cssText =
-        'width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:#0ea5e9;cursor:pointer;padding:0;';
+      el.style.cssText = `width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:${color};cursor:pointer;padding:0;box-shadow:0 2px 4px rgba(0,0,0,0.3);`;
       el.addEventListener('click', () => onSelectPlace(place.slug));
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([place.coordinates.lng, place.coordinates.lat])
-        .setPopup(new maplibregl.Popup({ offset: 14 }).setText(place.name))
+        .setPopup(
+          new maplibregl.Popup({ offset: 14 }).setHTML(
+            `<strong>${place.name}</strong><br/><small>${place.categoryName} • ${place.cityName}</small>`
+          )
+        )
         .addTo(map);
       markersRef.current.push(marker);
       bounds.extend([place.coordinates.lng, place.coordinates.lat]);
@@ -89,16 +104,65 @@ export default function MapView({
       bounds.extend([userLocation.lng, userLocation.lat]);
     }
 
+    // Dibujo de ruta activa si existe
+    try {
+      if (activeRoute?.geometryGeoJSON) {
+        if (map.getSource('active-route-src')) {
+          (map.getSource('active-route-src') as maplibregl.GeoJSONSource).setData(
+            activeRoute.geometryGeoJSON as any
+          );
+        } else {
+          map.addSource('active-route-src', {
+            type: 'geojson',
+            data: activeRoute.geometryGeoJSON as any,
+          });
+          map.addLayer({
+            id: 'active-route-line',
+            type: 'line',
+            source: 'active-route-src',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': '#38bdf8',
+              'line-width': 4,
+              'line-opacity': 0.85,
+            },
+          });
+        }
+
+        const routeBounds = new maplibregl.LngLatBounds();
+        for (const coord of activeRoute.geometryGeoJSON.coordinates) {
+          routeBounds.extend(coord);
+        }
+        map.fitBounds(routeBounds, { padding: 60, maxZoom: 15, duration: 600 });
+        return;
+      } else {
+        if (map.getLayer('active-route-line')) {
+          map.removeLayer('active-route-line');
+        }
+        if (map.getSource('active-route-src')) {
+          map.removeSource('active-route-src');
+        }
+      }
+    } catch {
+      // Ignora error puntual de capas en re-render
+    }
+
     if (!bounds.isEmpty()) {
       map.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 500 });
     } else if (fallbackCenter) {
       map.flyTo({ center: [fallbackCenter.lng, fallbackCenter.lat], zoom: 10 });
     }
-  }, [places, userLocation, fallbackCenter, ready, onSelectPlace]);
+  }, [places, userLocation, fallbackCenter, activeRoute, ready, onSelectPlace]);
 
   if (error) {
     return <div role="alert" className="alert alert-warn">{error}</div>;
   }
-  return <div ref={container} className="map-box" role="region" aria-label="Mapa de lugares" />;
-}
 
+  return (
+    <div
+      ref={container}
+      className="map-box"
+      aria-label="Mapa de lugares verificados"
+    />
+  );
+}

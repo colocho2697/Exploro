@@ -2,20 +2,32 @@ import {
   ApiResponse,
   AppBootstrapConfig,
   AuthSessionResponse,
+  AutocompleteSuggestion,
   CategoryDTO,
   CityDTO,
   CollectionDTO,
   DestinationDTO,
+  DuplicateCandidateDTO,
+  EvidenceSummaryDTO,
   FavoriteItemDTO,
+  GeoAddress,
   HealthStatusResponse,
   PlaceCardDTO,
   PlaceDetailDTO,
+  RouteSummary,
+  SourceDTO,
+  SourceSyncResult,
   SurpriseMeResponse,
   UserProfile,
 } from '@exploro/shared-types';
 import {
   CreateCollectionInput,
+  CreateEvidenceInput,
+  CreateSourceInput,
+  DetectDuplicatesQueryInput,
   DiscoverPlacesQueryInput,
+  GeoAutocompleteQueryInput,
+  GeoRouteInput,
   LoginInput,
   RegisterInput,
   SurpriseMeRequestInput,
@@ -245,6 +257,97 @@ export class ExploroApiClient {
       method: 'PATCH',
       body: JSON.stringify(input),
     });
+    return res.data;
+  }
+
+  // -------------------------------------------------------------------------
+  // FASE 3: Servicios Geográficos, Fuentes y Evidencias
+  // -------------------------------------------------------------------------
+
+  public async geoAutocomplete(
+    params: GeoAutocompleteQueryInput
+  ): Promise<AutocompleteSuggestion[]> {
+    const sp = new URLSearchParams();
+    sp.set('q', params.q);
+    if (params.citySlug) sp.set('citySlug', params.citySlug);
+    if (params.lat !== undefined) sp.set('lat', String(params.lat));
+    if (params.lng !== undefined) sp.set('lng', String(params.lng));
+    if (params.limit !== undefined) sp.set('limit', String(params.limit));
+
+    const res = await this.request<AutocompleteSuggestion[]>(
+      `/geo/autocomplete?${sp.toString()}`
+    );
+    return res.data;
+  }
+
+  public async geoReverse(lat: number, lng: number): Promise<GeoAddress> {
+    const res = await this.request<GeoAddress>(
+      `/geo/reverse?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+    );
+    return res.data;
+  }
+
+  public async geoCalculateRoute(input: GeoRouteInput): Promise<RouteSummary> {
+    const res = await this.request<RouteSummary>('/geo/route', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return res.data;
+  }
+
+  public async listSources(): Promise<SourceDTO[]> {
+    const res = await this.request<SourceDTO[]>('/sources');
+    return res.data;
+  }
+
+  public async createSource(input: CreateSourceInput): Promise<SourceDTO> {
+    const res = await this.request<SourceDTO>('/sources', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return res.data;
+  }
+
+  public async syncSource(sourceId: string): Promise<SourceSyncResult> {
+    const res = await this.request<SourceSyncResult>(
+      `/sources/${encodeURIComponent(sourceId)}/sync`,
+      { method: 'POST' }
+    );
+    return res.data;
+  }
+
+  public async listPlaceEvidences(
+    placeId: string
+  ): Promise<EvidenceSummaryDTO[]> {
+    const res = await this.request<EvidenceSummaryDTO[]>(
+      `/places/${encodeURIComponent(placeId)}/evidences`
+    );
+    return res.data;
+  }
+
+  public async createEvidence(
+    input: CreateEvidenceInput
+  ): Promise<EvidenceSummaryDTO> {
+    const res = await this.request<EvidenceSummaryDTO>('/evidences', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return res.data;
+  }
+
+  public async detectDuplicates(
+    params: Partial<DetectDuplicatesQueryInput> = {}
+  ): Promise<DuplicateCandidateDTO[]> {
+    const sp = new URLSearchParams();
+    if (params.placeId) sp.set('placeId', params.placeId);
+    if (params.radiusMeters) sp.set('radiusMeters', String(params.radiusMeters));
+    if (params.similarityThreshold)
+      sp.set('similarityThreshold', String(params.similarityThreshold));
+
+    const qs = sp.toString();
+    const res = await this.request<DuplicateCandidateDTO[]>(
+      `/normalization/duplicates${qs ? `?${qs}` : ''}`
+    );
     return res.data;
   }
 }

@@ -11,8 +11,23 @@ const TIME_OF_DAY: Record<string, string> = {
   ANY: 'cualquier hora',
 };
 
-/** Evidencias, actividades y datos del establecimiento; lo desconocido se declara como tal. */
-export function PlaceDetail({ client, slug }: { client: ExploroApiClient; slug: string }): React.JSX.Element {
+const SOURCE_LABELS: Record<string, string> = {
+  EXTERNAL_COMMUNITY: 'Comunidad externa (Reddit)',
+  BLOG: 'Blog de viajes independiente',
+  NATIVE_EXPERIENCE: 'Experiencia nativa verificada',
+  CURATED: 'Curaduría editorial',
+};
+
+/** Evidencias, actividades, cálculo de rutas y datos del establecimiento sin inventar datos. */
+export function PlaceDetail({
+  client,
+  slug,
+  onCalculateRoute,
+}: {
+  client: ExploroApiClient;
+  slug: string;
+  onCalculateRoute?: (coords: { lat: number; lng: number }, name: string) => void;
+}): React.JSX.Element {
   const [detail, setDetail] = useState<PlaceDetailDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,8 +36,13 @@ export function PlaceDetail({ client, slug }: { client: ExploroApiClient; slug: 
     client
       .getPlaceBySlug(slug)
       .then((d) => active && setDetail(d))
-      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : 'No se pudo cargar el detalle.'));
-    return () => { active = false; };
+      .catch((e: unknown) =>
+        active &&
+        setError(e instanceof Error ? e.message : 'No se pudo cargar el detalle.')
+      );
+    return () => {
+      active = false;
+    };
   }, [client, slug]);
 
   if (error) return <div role="alert" className="alert alert-error">{error}</div>;
@@ -30,19 +50,54 @@ export function PlaceDetail({ client, slug }: { client: ExploroApiClient; slug: 
 
   return (
     <div style={{ display: 'grid', gap: '.8rem', fontSize: '.85rem' }}>
+      {/* Botón de cómo llegar con ruta calculada */}
+      {onCalculateRoute ? (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() =>
+            onCalculateRoute(
+              { lat: detail.coordinates.lat, lng: detail.coordinates.lng },
+              detail.name
+            )
+          }
+          style={{ width: '100%', justifyContent: 'center' }}
+        >
+          🗺️ Trazar ruta hacia este lugar (Costo $0)
+        </button>
+      ) : null}
+
       <section>
-        <strong>Evidencias ({detail.evidences.length})</strong>
+        <strong>Evidencias Auditables ({detail.evidences.length})</strong>
         {detail.evidences.length === 0 ? (
           <p style={{ color: '#fbbf24' }}>Sin evidencias registradas todavía.</p>
         ) : (
-          <ul style={{ paddingLeft: '1.1rem', display: 'grid', gap: '.4rem', marginTop: '.3rem' }}>
+          <ul style={{ paddingLeft: '1.1rem', display: 'grid', gap: '.6rem', marginTop: '.3rem' }}>
             {detail.evidences.map((ev) => (
-              <li key={ev.id}>
-                {ev.extractedSnippet}
-                <div style={{ color: 'var(--text-secondary)', fontSize: '.78rem' }}>
-                  {ev.sourceName}
+              <li key={ev.id} style={{ borderLeft: '3px solid #10b981', paddingLeft: '.6rem' }}>
+                <div>"{ev.extractedSnippet}"</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '.78rem', marginTop: '.2rem' }}>
+                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>
+                    {SOURCE_LABELS[ev.sourceType] ?? ev.sourceName}
+                  </span>
+                  {' • '}
+                  <span>Confianza: {Math.round(ev.confidenceScore * 100)}%</span>
                   {ev.publishedAt ? ` • ${new Date(ev.publishedAt).toLocaleDateString('es-US')}` : ''}
-                  {ev.externalUrl ? '' : ' • sin enlace original'}
+                  {ev.externalUrl ? (
+                    <span>
+                      {' • '}
+                      <a
+                        href={ev.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#93c5fd', textDecoration: 'underline' }}
+                      >
+                        Enlace original
+                      </a>
+                    </span>
+                  ) : (
+                    ' • sin enlace público'
+                  )}
                 </div>
               </li>
             ))}
@@ -82,4 +137,3 @@ export function PlaceDetail({ client, slug }: { client: ExploroApiClient; slug: 
     </div>
   );
 }
-

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicPlaceScore,
+  calculateEvidenceConfidence,
+  calculateTrigramSimilarity,
   canAccessMode,
   estimateTravelMinutes,
   evaluateBudgetFit,
+  evaluatePlaceDuplicate,
   formatVerifiedPriceRange,
+  generateEvidenceContentHash,
   getInitialModeDescriptors,
+  normalizePlaceName,
   resolveSafeRecommendationReason,
   selectSurpriseSuggestions,
   SurpriseCandidate,
@@ -225,5 +230,103 @@ describe('@exploro/business-rules', () => {
     expect(result.status).toBe('INSUFFICIENT_DATA');
     expect(result.text).toContain('Evidencia limitada');
   });
+
+  describe('Fase 3 — Normalización, Deduplicación y Confiabilidad', () => {
+    it('normaliza nombres de lugares eliminando acentos, puntuación y sufijos corporativos', () => {
+      expect(normalizePlaceName("L'Industrie Pizzeria LLC")).toBe('l industrie pizzeria');
+      expect(normalizePlaceName('Café & Restaurant El Sol, Inc.')).toBe('el sol');
+      expect(normalizePlaceName('Sángüich de Miami')).toBe('sanguich de miami');
+    });
+
+    it('calcula similitud de trigramas concordante con pg_trgm', () => {
+      // Coincidencia exacta
+      expect(calculateTrigramSimilarity('Central Park', 'Central Park')).toBe(1.0);
+
+      // Coincidencia alta con variación ortográfica
+      const simHigh = calculateTrigramSimilarity('L’Industrie Pizzeria', 'L Industrie Pizza');
+      expect(simHigh).toBeGreaterThan(0.7);
+
+      // Nombres totalmente distintos
+      const simLow = calculateTrigramSimilarity('The Met Museum', 'Joe Pizza');
+      expect(simLow).toBeLessThan(0.2);
+    });
+
+    it('aplica las reglas estrictas de deduplicación (Principio #1: no fusionar en ambigüedad)', () => {
+      const coordsA = { lat: 40.7332, lng: -74.0052 };
+
+      // Caso 1: Mismo lugar a 5 metros y nombre idéntico -> AUTO_MERGE
+      const coordsClose = { lat: 40.73322, lng: -74.00522 };
+      const autoMerge = evaluatePlaceDuplicate({
+        nameA: "L'Industrie Pizzeria",
+        coordsA,
+        nameB: 'L’Industrie Pizzeria NYC',
+        coordsB: coordsClose,
+      });
+      expect(autoMerge.action).toBe('AUTO_MERGE');
+      expect(autoMerge.isDuplicate).toBe(true);
+
+      // Caso 2: Similitud y distancia moderada (150m) -> MANUAL_REVIEW (nunca auto-fusionar)
+      const coordsNearby = { lat: 40.7345, lng: -74.006 };
+      const manualReview = evaluatePlaceDuplicate({
+        nameA: 'Joe Pizza West Village',
+        coordsA,
+        nameB: 'Joes Pizza Village',
+        coordsB: coordsNearby,
+      });
+      expect(manualReview.action).toBe('MANUAL_REVIEW');
+      expect(manualReview.isDuplicate).toBe(true);
+
+      // Caso 3: Lugares a 2 km -> DISTINCT
+      const coordsFar = { lat: 40.75, lng: -73.98 };
+      const distinct = evaluatePlaceDuplicate({
+        nameA: 'Central Park',
+        coordsA,
+        nameB: 'Battery Park',
+        coordsB: coordsFar,
+      });
+      expect(distinct.action).toBe('DISTINCT');
+      expect(distinct.isDuplicate).toBe(false);
+    });
+
+    it('genera hashes de contenido deterministas y de longitud fija para evidencias', () => {
+      const hash1 = generateEvidenceContentHash(
+        'REDDIT_US_FOOD',
+        'https://reddit.com/r/FoodNYC/post1',
+        'Masa crujiente y deliciosa.'
+      );
+      const hash2 = generateEvidenceContentHash(
+        'REDDIT_US_FOOD',
+        'https://reddit.com/r/FoodNYC/post1',
+        'Masa crujiente y deliciosa.'
+      );
+      const hash3 = generateEvidenceContentHash(
+        'REDDIT_US_FOOD',
+        'https://reddit.com/r/FoodNYC/post1',
+        'Masa diferente y suave.'
+      );
+
+      expect(hash1).toBe(hash2);
+      expect(hash1).not.toBe(hash3);
+      expect(hash1.length).toBeLessThanOrEqual(64);
+    });
+
+    it('calcula la confianza de evidencias premiando verificabilidad y fecha', () => {
+      const native = calculateEvidenceConfidence({
+        baseTrustWeight: 0.8,
+        hasPublishedAt: true,
+        hasExternalUrl: true,
+        isNativeReview: true,
+      });
+      expect(native).toBeGreaterThanOrEqual(0.95);
+
+      const externalNoDate = calculateEvidenceConfidence({
+        baseTrustWeight: 0.75,
+        hasPublishedAt: false,
+        hasExternalUrl: false,
+      });
+      expect(externalNoDate).toBe(0.75);
+    });
+  });
 });
+
 

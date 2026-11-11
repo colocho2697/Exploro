@@ -9,6 +9,7 @@ import {
   Coordinates,
   ExplorationMode,
   ModeDescriptor,
+  RouteSummary,
 } from '@exploro/shared-types';
 import { AuthPanel } from '../components/AuthPanel';
 import { FilterValues, FiltersBar } from '../components/FiltersBar';
@@ -56,6 +57,11 @@ export default function ExploroHomePage(): React.JSX.Element {
   const [showAuth, setShowAuth] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [highlightSlug, setHighlightSlug] = useState<string | null>(null);
+
+  // Fase 3: Ruteo y cálculo de distancias sin costo
+  const [activeRoute, setActiveRoute] = useState<RouteSummary | null>(null);
+  const [routeTargetName, setRouteTargetName] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
 
   // Configuración de modalidades y feature flags desde la API (no hard-coded).
   useEffect(() => {
@@ -130,6 +136,33 @@ export default function ExploroHomePage(): React.JSX.Element {
     setHighlightSlug(slug);
     document.getElementById(`place-${slug}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, []);
+
+  const handleCalculateRoute = useCallback(
+    (destination: Coordinates, name: string): void => {
+      setRouteError(null);
+      const origin =
+        filterValues.coords ??
+        mapCenter ??
+        (discovery.places[0] ? discovery.places[0].coordinates : { lat: 40.7128, lng: -74.006 });
+
+      session.client
+        .geoCalculateRoute({
+          origin,
+          destination,
+          mode: 'driving',
+        })
+        .then((route) => {
+          setActiveRoute(route);
+          setRouteTargetName(name);
+        })
+        .catch((err: unknown) => {
+          setRouteError(
+            err instanceof Error ? err.message : 'No se pudo calcular la ruta.'
+          );
+        });
+    },
+    [filterValues.coords, mapCenter, discovery.places, session.client]
+  );
 
   if (selectedMode === null) {
     return <ModeSelection modes={modes} feedback={modeFeedback} onSelect={handleSelectMode} />;
@@ -258,6 +291,7 @@ export default function ExploroHomePage(): React.JSX.Element {
           cities={cities}
           isLoggedIn={Boolean(session.user)}
           personalizationEnabled={personalizationOn}
+          client={session.client}
           onChange={patchFilters}
           onTogglePersonalization={(enabled) => void session.setPersonalization(enabled)}
         />
@@ -269,6 +303,44 @@ export default function ExploroHomePage(): React.JSX.Element {
           radiusKm={filterValues.unbounded ? 500 : milesToKm(filterValues.radiusMiles)}
           applyPreferences
         />
+
+        {activeRoute && routeTargetName && (
+          <div
+            role="status"
+            className="alert alert-info"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(14,165,233,.12)',
+              border: '1px solid #0ea5e9',
+            }}
+          >
+            <div>
+              <strong>🗺️ Ruta a {routeTargetName}: </strong>
+              <span>
+                {activeRoute.distanceMiles} mi ({Math.round(activeRoute.distanceMeters / 1000)} km) • ~{activeRoute.durationMinutes} min en auto
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setActiveRoute(null);
+                setRouteTargetName(null);
+              }}
+              style={{ padding: '.2rem .6rem', fontSize: '.75rem' }}
+            >
+              Cerrar ruta
+            </button>
+          </div>
+        )}
+
+        {routeError && (
+          <div role="alert" className="alert alert-warn">
+            {routeError}
+          </div>
+        )}
 
         <section aria-label="Resultados" aria-live="polite">
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem', marginBottom: '.8rem' }}>
@@ -309,6 +381,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                         onToggleFavorite={(p) => void library.toggleFavorite(p)}
                         onAddToCollection={(cid, p) => void library.addToCollection(cid, p)}
                         onRequireLogin={() => setShowAuth(true)}
+                        onCalculateRoute={handleCalculateRoute}
                       />
                     </div>
                   ))}
@@ -319,6 +392,7 @@ export default function ExploroHomePage(): React.JSX.Element {
               places={discovery.places}
               userLocation={filterValues.coords}
               fallbackCenter={mapCenter}
+              activeRoute={activeRoute}
               onSelectPlace={focusPlace}
             />
           </div>

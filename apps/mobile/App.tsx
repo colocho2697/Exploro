@@ -18,6 +18,7 @@ import {
   getInitialModeDescriptors,
 } from '@exploro/business-rules';
 import {
+  AutocompleteSuggestion,
   BudgetTier,
   CategoryDTO,
   CompanionType,
@@ -25,6 +26,7 @@ import {
   PlaceCardDTO,
   PlaceDetailDTO,
   PlaceSortBy,
+  RouteSummary,
   SurpriseSuggestionDTO,
 } from '@exploro/shared-types';
 import { formatDistanceUS, US_CITIES } from './src/format';
@@ -50,16 +52,23 @@ export default function App(): React.JSX.Element {
   const [sortBy, setSortBy] = useState<PlaceSortBy>('recommended');
   const [unbounded, setUnbounded] = useState<boolean>(true);
 
+  // Autocomplete
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<
+    AutocompleteSuggestion[]
+  >([]);
+
   // Datos
   const [places, setPlaces] = useState<PlaceCardDTO[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState<boolean>(false);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
-  // Detalle de lugar
+  // Detalle de lugar y ruta
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [placeDetail, setPlaceDetail] = useState<PlaceDetailDTO | null>(null);
   const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
+  const [routeInfo, setRouteInfo] = useState<RouteSummary | null>(null);
+  const [routeLoading, setRouteLoading] = useState<boolean>(false);
 
   // Modal Sorpréndeme
   const [surpriseModalVisible, setSurpriseModalVisible] = useState<boolean>(false);
@@ -98,6 +107,27 @@ export default function App(): React.JSX.Element {
     })();
   }, [selectedMode, client]);
 
+  // Autocomplete en búsqueda
+  useEffect(() => {
+    if (selectedMode !== 'TRAVELER' || searchQuery.trim().length < 2) {
+      setAutocompleteSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      client
+        .geoAutocomplete({
+          q: searchQuery,
+          citySlug: selectedCitySlug || undefined,
+          limit: 4,
+        })
+        .then((res) => setAutocompleteSuggestions(res))
+        .catch(() => setAutocompleteSuggestions([]));
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedCitySlug, selectedMode, client]);
+
   // Consulta de lugares según filtros y orden
   useEffect(() => {
     if (selectedMode !== 'TRAVELER') return;
@@ -133,6 +163,7 @@ export default function App(): React.JSX.Element {
   const handleOpenDetail = async (idOrSlug: string): Promise<void> => {
     setSelectedPlaceId(idOrSlug);
     setLoadingDetail(true);
+    setRouteInfo(null);
     try {
       const detail = await client.getPlaceBySlug(idOrSlug);
       setPlaceDetail(detail);
@@ -146,6 +177,35 @@ export default function App(): React.JSX.Element {
   const handleCloseDetail = (): void => {
     setSelectedPlaceId(null);
     setPlaceDetail(null);
+    setRouteInfo(null);
+  };
+
+  // Calcular ruta sin costo ($0.00)
+  const handleCalculateRoute = async (mode: 'driving' | 'walking'): Promise<void> => {
+    if (!placeDetail) return;
+    setRouteLoading(true);
+    try {
+      // Usa coordenadas de ciudad seleccionada o Nueva York como referencia
+      const cityData = US_CITIES.find((c) => c.slug === selectedCitySlug);
+      const origin =
+        cityData && 'lat' in cityData
+          ? { lat: cityData.lat, lng: cityData.lng }
+          : { lat: 40.7128, lng: -74.006 };
+
+      const route = await client.geoCalculateRoute({
+        origin,
+        destination: {
+          lat: placeDetail.coordinates.lat,
+          lng: placeDetail.coordinates.lng,
+        },
+        mode,
+      });
+      setRouteInfo(route);
+    } catch {
+      // En caso de error
+    } finally {
+      setRouteLoading(false);
+    }
   };
 
   // Toggle de favoritos
@@ -298,7 +358,7 @@ export default function App(): React.JSX.Element {
           </Pressable>
         </View>
 
-        {/* Barra de Búsqueda */}
+        {/* Barra de Búsqueda con Autocomplete */}
         <View style={styles.searchContainer}>
           <TextInput
             placeholder="Buscar lugares, museos, comida..."
@@ -313,6 +373,38 @@ export default function App(): React.JSX.Element {
             </Pressable>
           ) : null}
         </View>
+
+        {/* Sugerencias de Autocomplete */}
+        {autocompleteSuggestions.length > 0 ? (
+          <View style={styles.suggestionsContainer}>
+            {autocompleteSuggestions.map((sug) => (
+              <Pressable
+                key={sug.id}
+                onPress={() => {
+                  if (sug.type === 'city') {
+                    const matched = US_CITIES.find(
+                      (c) => c.value.toLowerCase() === sug.city?.toLowerCase()
+                    );
+                    setSelectedCitySlug(matched?.slug ?? '');
+                    setSearchQuery('');
+                  } else {
+                    setSearchQuery(sug.title);
+                  }
+                  setAutocompleteSuggestions([]);
+                }}
+                style={styles.suggestionItem}
+              >
+                <View>
+                  <Text style={styles.suggestionTitle}>{sug.title}</Text>
+                  <Text style={styles.suggestionSub}>{sug.subtitle}</Text>
+                </View>
+                <Text style={styles.suggestionBadge}>
+                  {sug.type === 'city' ? 'Ciudad' : 'Lugar'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {/* Filtro de Ciudades de EE. UU. */}
         <Text style={styles.filterLabel}>Ciudad (EE. UU.):</Text>
@@ -692,7 +784,7 @@ export default function App(): React.JSX.Element {
         </SafeAreaView>
       </Modal>
 
-      {/* MODAL: Detalle de Lugar */}
+      {/* MODAL: Detalle de Lugar y Cálculo de Ruta */}
       <Modal
         visible={selectedPlaceId !== null}
         animationType="fade"
@@ -729,6 +821,46 @@ export default function App(): React.JSX.Element {
                   <Text style={styles.detailAddress}>{placeDetail.addressText}</Text>
                 ) : null}
 
+                {/* BOTÓN: Calcular Ruta (Fase 3) */}
+                <View style={styles.routeButtonsRow}>
+                  <Pressable
+                    disabled={routeLoading}
+                    onPress={() => void handleCalculateRoute('driving')}
+                    style={styles.routeBtn}
+                  >
+                    <Text style={styles.routeBtnText}>🚗 Cómo llegar (Auto)</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={routeLoading}
+                    onPress={() => void handleCalculateRoute('walking')}
+                    style={styles.routeBtn}
+                  >
+                    <Text style={styles.routeBtnText}>🚶 A pie</Text>
+                  </Pressable>
+                </View>
+
+                {routeLoading ? (
+                  <ActivityIndicator color="#38bdf8" style={{ marginVertical: 12 }} />
+                ) : null}
+
+                {routeInfo ? (
+                  <View style={styles.routeResultCard}>
+                    <Text style={styles.routeResultTitle}>
+                      📍 Trayecto calculado ({routeInfo.mode === 'driving' ? 'Auto' : 'A pie'}):
+                    </Text>
+                    <Text style={styles.routeResultMeta}>
+                      Distancia: {routeInfo.distanceMiles} mi • Tiempo estimado: ~{routeInfo.durationMinutes} min
+                    </Text>
+                    <View style={styles.stepsList}>
+                      {routeInfo.steps.map((st, i) => (
+                        <Text key={i} style={styles.stepItem}>
+                          {i + 1}. {st.instruction} (~{Math.round(st.distanceMeters)} m)
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
                 {/* Evidencia de recomendación */}
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Por qué lo recomendamos</Text>
@@ -758,17 +890,18 @@ export default function App(): React.JSX.Element {
                   </View>
                 ) : null}
 
-                {/* Evidencias registradas */}
+                {/* Evidencias registradas auditables */}
                 {placeDetail.evidences.length > 0 ? (
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>
-                      Evidencias registradas ({placeDetail.evidences.length})
+                      Evidencias auditables ({placeDetail.evidences.length})
                     </Text>
                     {placeDetail.evidences.map((ev) => (
                       <View key={ev.id} style={styles.evidenceItem}>
                         <Text style={styles.evidenceSnippet}>"{ev.extractedSnippet}"</Text>
                         <Text style={styles.evidenceMeta}>
-                          Fuente: {ev.sourceName} (Confianza: {Math.round(ev.confidenceScore * 100)}%)
+                          {ev.sourceName} • Confianza: {Math.round(ev.confidenceScore * 100)}%
+                          {ev.publishedAt ? ` • ${new Date(ev.publishedAt).toLocaleDateString()}` : ''}
                         </Text>
                       </View>
                     ))}
@@ -926,7 +1059,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#131c31',
     borderRadius: 10,
     paddingHorizontal: 12,
-    marginBottom: 14,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#1e293b',
   },
@@ -942,6 +1075,36 @@ const styles = StyleSheet.create({
   clearSearchText: {
     color: '#94a3b8',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  suggestionsContainer: {
+    backgroundColor: '#131c31',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  suggestionTitle: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  suggestionSub: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  suggestionBadge: {
+    color: '#38bdf8',
+    fontSize: 11,
     fontWeight: '700',
   },
   filterLabel: {
@@ -1234,11 +1397,54 @@ const styles = StyleSheet.create({
   detailAddress: {
     color: '#94a3b8',
     fontSize: 13,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  routeButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  routeBtn: {
+    flex: 1,
+    backgroundColor: '#0369a1',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  routeBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  routeResultCard: {
+    backgroundColor: '#0c4a6e',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+  },
+  routeResultTitle: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  routeResultMeta: {
+    color: '#7dd3fc',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  stepsList: {
+    gap: 4,
+  },
+  stepItem: {
+    color: '#e2e8f0',
+    fontSize: 11,
   },
   detailSection: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: '#1e293b',
   },
