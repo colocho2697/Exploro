@@ -1,0 +1,7 @@
+FROM alpine:latest
+
+RUN apk add --no-cache minio minio-client curl ca-certificates
+
+EXPOSE 9000 9001
+
+ENTRYPOINT ["/usr/bin/minio"]

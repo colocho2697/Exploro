@@ -1,0 +1,166 @@
+import { z } from 'zod';
+
+export const explorationModeSchema = z.enum(['TRAVELER', 'LOCAL']);
+
+export const budgetTierSchema = z.enum([
+  'FREE',
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+  'LUXURY',
+  'UNKNOWN',
+]);
+
+export const companionTypeSchema = z.enum([
+  'SOLO',
+  'COUPLE',
+  'FAMILY',
+  'FRIENDS',
+]);
+
+export const travelStyleSchema = z.enum([
+  'FAMILIAR',
+  'AVENTURERO',
+  'NATURALEZA',
+  'ROMANTICO',
+  'INDIVIDUAL',
+  'DESCANSO_Y_LUJO',
+  'GASTRONOMICO',
+  'CULTURAL',
+]);
+
+export const categorySlugSchema = z.enum([
+  'comida',
+  'turismo',
+  'entretenimiento',
+  'actividades',
+  'eventos',
+  'compras',
+]);
+
+export const coordinatesSchema = z.object({
+  lat: z.number().min(-90, 'Latitud mínima -90').max(90, 'Latitud máxima 90'),
+  lng: z
+    .number()
+    .min(-180, 'Longitud mínima -180')
+    .max(180, 'Longitud máxima 180'),
+});
+
+export const registerSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Correo electrónico inválido'),
+  password: z
+    .string()
+    .min(8, 'La contraseña debe tener al menos 8 caracteres')
+    .max(128, 'La contraseña no puede superar 128 caracteres')
+    .regex(/[A-Z]/, 'Debe incluir al menos una letra mayúscula')
+    .regex(/[a-z]/, 'Debe incluir al menos una letra minúscula')
+    .regex(/[0-9]/, 'Debe incluir al menos un número'),
+  displayName: z
+    .string()
+    .trim()
+    .min(2, 'El nombre debe tener al menos 2 caracteres')
+    .max(80, 'El nombre no puede superar 80 caracteres'),
+});
+
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Correo electrónico inválido'),
+  password: z.string().min(1, 'La contraseña es requerida'),
+});
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(16, 'Token de refresco inválido'),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Correo electrónico inválido'),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(16, 'Token de recuperación inválido'),
+  newPassword: registerSchema.shape.password,
+});
+
+export const updatePreferencesSchema = z.object({
+  personalizationEnabled: z.boolean().optional(),
+  budgetTier: budgetTierSchema.optional(),
+  favoriteCategories: z.array(categorySlugSchema).optional(),
+  travelStyles: z.array(travelStyleSchema).optional(),
+  companionDefault: companionTypeSchema.optional(),
+});
+
+/**
+ * Booleanos provenientes de query strings.
+ * `z.coerce.boolean()` convierte "false" en true (cualquier cadena no vacía),
+ * por lo que se interpreta explícitamente "true"/"false"/"1"/"0".
+ */
+const queryBoolean = (defaultValue: boolean) =>
+  z
+    .preprocess((value) => {
+      if (value === 'true' || value === '1' || value === true) return true;
+      if (value === 'false' || value === '0' || value === false) return false;
+      return value;
+    }, z.boolean())
+    .default(defaultValue);
+
+export const placeSortBySchema = z.enum(['recommended', 'distance', 'name']);
+
+export const discoverPlacesQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  radiusKm: z.coerce.number().min(0.5).max(500).default(15),
+  unbounded: queryBoolean(false),
+  citySlug: z.string().trim().min(1).optional(),
+  destinationSlug: z.string().trim().min(1).optional(),
+  categorySlug: z.string().trim().min(1).optional(),
+  subcategorySlug: z.string().trim().min(1).optional(),
+  priceTier: budgetTierSchema.optional(),
+  applyPreferences: queryBoolean(true),
+  sortBy: placeSortBySchema.default('recommended'),
+  searchQuery: z.string().trim().max(120).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export const surpriseMeRequestSchema = z.object({
+  coordinates: coordinatesSchema.optional(),
+  citySlug: z.string().trim().min(1).optional(),
+  radiusKm: z.number().min(0.5).max(500).default(25),
+  budgetTier: budgetTierSchema.default('MEDIUM'),
+  availableMinutes: z.number().int().min(30).max(1440).default(180),
+  companionType: companionTypeSchema.default('SOLO'),
+  applyPreferences: z.boolean().default(true),
+  seed: z.number().int().optional(),
+});
+
+export const updateCollectionSchema = z.object({
+  name: z.string().trim().min(2).max(80).optional(),
+  description: z.string().trim().max(300).nullable().optional(),
+  isPublic: z.boolean().optional(),
+});
+
+export const addCollectionItemSchema = z.object({
+  placeId: z.string().uuid('Identificador de lugar inválido'),
+});
+
+export const createCollectionSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, 'El nombre de la colección es muy corto')
+    .max(80, 'El nombre de la colección es muy largo'),
+  description: z.string().trim().max(300).optional(),
+  isPublic: z.boolean().default(false),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type UpdatePreferencesInput = z.infer<typeof updatePreferencesSchema>;
+export type DiscoverPlacesQueryInput = z.infer<typeof discoverPlacesQuerySchema>;
+export type SurpriseMeRequestInput = z.infer<typeof surpriseMeRequestSchema>;
+export type CreateCollectionInput = z.infer<typeof createCollectionSchema>;
+export type UpdateCollectionInput = z.infer<typeof updateCollectionSchema>;
+export type AddCollectionItemInput = z.infer<typeof addCollectionItemSchema>;
+
