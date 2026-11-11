@@ -509,5 +509,123 @@ export interface AiFinOpsMetrics {
   costPolicy: 'ZERO_COST_USD_0';
 }
 
+// ============================================================================
+// FASE 5: SISTEMA DE EXPERIENCIAS PROPIAS
+// ============================================================================
+
+export type ActivityLogStatus = 'STARTED' | 'COMPLETED' | 'CANCELLED';
+
+export type VisitVerificationMethod = 'NONE' | 'GPS_PROXIMITY' | 'QR_CODE';
+
+export type ReviewType = 'RESTAURANT' | 'TOURISM' | 'GENERAL';
+
+export type RestaurantValueForMoney = 'EXCELLENT' | 'FAIR' | 'EXPENSIVE';
+
+export type TourismDurationSpent =
+  | 'UNDER_1_HOUR'
+  | '1_TO_2_HOURS'
+  | '2_TO_4_HOURS'
+  | 'HALF_DAY'
+  | 'FULL_DAY';
+
+export type TourismAccessibility =
+  | 'EASY'
+  | 'MODERATE'
+  | 'DIFFICULT'
+  | 'WHEELCHAIR_ACCESSIBLE';
+
+export interface StartActivityDTO {
+  placeId: string;
+  activityId?: string;
+  activityTitle?: string;
+}
+
+export interface ActivityLogDTO {
+  id: string;
+  userId: string;
+  placeId: string;
+  activityId?: string | null;
+  activityTitle: string;
+  status: ActivityLogStatus;
+  verificationMethod: VisitVerificationMethod;
+  isVerifiedVisit: boolean;
+  startedAt: string;
+  completedAt?: string | null;
+  verifiedAt?: string | null;
+}
+
+export interface VerifyVisitDTO {
+  latitude?: number;
+  longitude?: number;
+  qrToken?: string;
+}
+
+export interface VerifyVisitResponse {
+  isVerified: boolean;
+  verificationMethod: VisitVerificationMethod;
+  distanceMeters?: number;
+  message: string;
+}
+
+export interface RestaurantReviewInput {
+  tasteQuality?: number; // 1 a 5
+  serviceRating?: number; // 1 a 5
+  valueForMoney?: RestaurantValueForMoney;
+  amountPaid?: number;
+  recommendedDish?: string;
+  wouldReturn: boolean;
+  comment?: string;
+}
+
+export interface TourismReviewInput {
+  worthIt: boolean;
+  durationSpent?: TourismDurationSpent;
+  amountPaid?: number;
+  accessibility?: TourismAccessibility;
+  recommendedItem?: string;
+  caveatOrTip?: string;
+  comment?: string;
+}
+
+export interface CompleteActivityReviewDTO {
+  reviewType: ReviewType;
+  restaurantReview?: RestaurantReviewInput;
+  tourismReview?: TourismReviewInput;
+  generalComment?: string;
+  wouldReturnOrRecommend?: boolean;
+}
+
+export interface UserReviewDTO {
+  id: string;
+  activityLogId?: string | null;
+  userId: string;
+  userName?: string;
+  placeId: string;
+  reviewType: ReviewType;
+  tasteQuality?: number | null;
+  serviceRating?: number | null;
+  valueForMoney?: RestaurantValueForMoney | null;
+  worthIt?: boolean | null;
+  durationSpent?: TourismDurationSpent | null;
+  accessibility?: TourismAccessibility | null;
+  amountPaid?: number | null;
+  currencyCode: string;
+  recommendedItem?: string | null;
+  caveatOrTip?: string | null;
+  wouldReturnOrRecommend: boolean;
+  comment?: string | null;
+  isVerifiedVisit: boolean;
+  verificationMethod: VisitVerificationMethod;
+  moderationStatus: 'PUBLISHED' | 'FLAGGED' | 'HIDDEN';
+  createdAt: string;
+}
+
+export const NATIVE_VISIT_WEIGHT_BONUS = {
+  VERIFIED_NATIVE: 1.35,
+  UNVERIFIED_NATIVE: 1.15,
+  EXTERNAL: 1.0,
+} as const;
+
+
 
 

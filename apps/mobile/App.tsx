@@ -18,6 +18,7 @@ import {
   getInitialModeDescriptors,
 } from '@exploro/business-rules';
 import {
+  ActivityLogDTO,
   AutocompleteSuggestion,
   BudgetTier,
   CategoryDTO,
@@ -29,6 +30,7 @@ import {
   PlaceSortBy,
   RouteSummary,
   SurpriseSuggestionDTO,
+  UserReviewDTO,
 } from '@exploro/shared-types';
 import { formatDistanceUS, US_CITIES } from './src/format';
 
@@ -71,6 +73,16 @@ export default function App(): React.JSX.Element {
   const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
   const [routeInfo, setRouteInfo] = useState<RouteSummary | null>(null);
   const [routeLoading, setRouteLoading] = useState<boolean>(false);
+
+  // Fase 5: Experiencias Propias y Verificación
+  const [activeActivity, setActiveActivity] = useState<ActivityLogDTO | null>(null);
+  const [placeReviews, setPlaceReviews] = useState<UserReviewDTO[]>([]);
+  const [experienceNotice, setExperienceNotice] = useState<string | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
+  const [feedbackRating, setFeedbackRating] = useState<number>(5);
+  const [feedbackRecommended, setFeedbackRecommended] = useState<string>('');
+  const [feedbackComment, setFeedbackComment] = useState<string>('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState<boolean>(false);
 
   // Modal Sorpréndeme
   const [surpriseModalVisible, setSurpriseModalVisible] = useState<boolean>(false);
@@ -167,12 +179,25 @@ export default function App(): React.JSX.Element {
     setLoadingDetail(true);
     setRouteInfo(null);
     setRecSummary(null);
+    setActiveActivity(null);
+    setPlaceReviews([]);
+    setExperienceNotice(null);
     try {
       const detail = await client.getPlaceBySlug(idOrSlug);
       setPlaceDetail(detail);
       client
         .getPlaceRecommendationSummary(detail.id)
         .then((s) => setRecSummary(s))
+        .catch(() => {});
+      client
+        .getPlaceReviews(detail.id)
+        .then((r) => setPlaceReviews(r))
+        .catch(() => {});
+      client
+        .getActiveActivity()
+        .then((act) => {
+          if (act && act.placeId === detail.id) setActiveActivity(act);
+        })
         .catch(() => {});
     } catch {
       setErrorNotice('No fue posible obtener los detalles del lugar.');
@@ -186,6 +211,87 @@ export default function App(): React.JSX.Element {
     setPlaceDetail(null);
     setRouteInfo(null);
     setRecSummary(null);
+    setActiveActivity(null);
+    setPlaceReviews([]);
+    setExperienceNotice(null);
+    setShowFeedbackModal(false);
+  };
+
+  // Fase 5: Acciones de Experiencias Propias y Verificación
+  const handleStartActivity = async (): Promise<void> => {
+    if (!placeDetail) return;
+    try {
+      setExperienceNotice(null);
+      const act = await client.startActivity({
+        placeId: placeDetail.id,
+        activityTitle: placeDetail.activities[0]?.title ?? `Visita a ${placeDetail.name}`,
+      });
+      setActiveActivity(act);
+      setExperienceNotice('¡Actividad iniciada! La presencia física no se asume por el simple inicio.');
+    } catch {
+      setExperienceNotice('No fue posible iniciar actividad (inicia sesión para registrarla).');
+    }
+  };
+
+  const handleVerifyProximity = async (): Promise<void> => {
+    if (!activeActivity || !placeDetail) return;
+    try {
+      // Simula verificación GPS cercana (< 50 metros)
+      const res = await client.verifyActivityVisit(activeActivity.id, {
+        latitude: placeDetail.coordinates.lat + 0.0001,
+        longitude: placeDetail.coordinates.lng + 0.0001,
+      });
+      setExperienceNotice(res.message);
+      if (res.isVerified) {
+        setActiveActivity((prev) =>
+          prev ? { ...prev, isVerifiedVisit: true, verificationMethod: 'GPS_PROXIMITY' } : null
+        );
+      }
+    } catch {
+      setExperienceNotice('Error al verificar proximidad con el lugar.');
+    }
+  };
+
+  const handleCompleteExperience = async (): Promise<void> => {
+    if (!activeActivity || !placeDetail) return;
+    setFeedbackSubmitting(true);
+    try {
+      const isFood = placeDetail.categorySlug === 'comida';
+      const rev = await client.completeActivityWithReview(activeActivity.id, {
+        reviewType: isFood ? 'RESTAURANT' : 'TOURISM',
+        restaurantReview: isFood
+          ? {
+              tasteQuality: feedbackRating,
+              recommendedDish: feedbackRecommended || undefined,
+              wouldReturn: true,
+              comment: feedbackComment || undefined,
+            }
+          : undefined,
+        tourismReview: !isFood
+          ? {
+              worthIt: true,
+              recommendedItem: feedbackRecommended || undefined,
+              comment: feedbackComment || undefined,
+            }
+          : undefined,
+        wouldReturnOrRecommend: true,
+        generalComment: feedbackComment || undefined,
+      });
+
+      setActiveActivity(null);
+      setShowFeedbackModal(false);
+      setExperienceNotice('¡Experiencia registrada! Tu opinión fortalece el ranking determinista.');
+      setPlaceReviews((prev) => [rev, ...prev]);
+
+      client
+        .getPlaceRecommendationSummary(placeDetail.id)
+        .then((s) => setRecSummary(s))
+        .catch(() => {});
+    } catch {
+      setExperienceNotice('Error al enviar opinión.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
   };
 
   // Calcular ruta sin costo ($0.00)
@@ -915,6 +1021,174 @@ export default function App(): React.JSX.Element {
                   </View>
                 </View>
 
+                {/* FASE 5: Experiencia Propia y Verificación de Visita */}
+                <View style={styles.experienceCard}>
+                  <View style={styles.experienceCardHeader}>
+                    <Text style={styles.experienceCardTitle}>🚀 Experiencia Propia</Text>
+                    {activeActivity?.isVerifiedVisit ? (
+                      <View style={styles.verifiedVisitBadge}>
+                        <Text style={styles.verifiedVisitBadgeText}>✓ Visita Verificada</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {!activeActivity ? (
+                    <Pressable
+                      onPress={() => void handleStartActivity()}
+                      style={styles.startActivityBtn}
+                    >
+                      <Text style={styles.startActivityBtnText}>
+                        ▶ Comenzar actividad en este lugar
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <View style={styles.activeActivityBox}>
+                      <Text style={styles.activeActivityTitle}>
+                        📍 En curso: {activeActivity.activityTitle}
+                      </Text>
+                      <Text style={styles.activeActivitySub}>
+                        Estado: {activeActivity.isVerifiedVisit ? 'Verificada con GPS' : 'Sin verificar presencia'}
+                      </Text>
+
+                      <View style={styles.activityActionsRow}>
+                        {!activeActivity.isVerifiedVisit ? (
+                          <Pressable
+                            onPress={() => void handleVerifyProximity()}
+                            style={styles.verifyGpsBtn}
+                          >
+                            <Text style={styles.verifyGpsBtnText}>📍 Verificar visita (GPS)</Text>
+                          </Pressable>
+                        ) : null}
+                        <Pressable
+                          onPress={() => setShowFeedbackModal(true)}
+                          style={styles.finishExperienceBtn}
+                        >
+                          <Text style={styles.finishExperienceBtnText}>✅ Finalizar y Calificar</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+
+                  {experienceNotice ? (
+                    <Text style={styles.experienceNoticeText}>{experienceNotice}</Text>
+                  ) : null}
+                </View>
+
+                {/* FASE 5: Modal de Reseña Corta Adaptada */}
+                {showFeedbackModal ? (
+                  <View style={styles.feedbackFormBox}>
+                    <Text style={styles.feedbackTitle}>
+                      {placeDetail.categorySlug === 'comida'
+                        ? '🍽️ Reseña rápida de Restaurante'
+                        : '🌄 Reseña rápida de Turismo'}
+                    </Text>
+                    <Text style={styles.feedbackSubtitle}>
+                      Sin formularios largos: comparte lo esencial para enriquecer el ranking.
+                    </Text>
+
+                    <Text style={styles.feedbackLabel}>Calificación general:</Text>
+                    <View style={styles.aspectsRow}>
+                      {[1, 2, 3, 4, 5].map((val) => (
+                        <Pressable
+                          key={val}
+                          onPress={() => setFeedbackRating(val)}
+                          style={[
+                            styles.positiveAspectChip,
+                            feedbackRating === val && { backgroundColor: '#38bdf8' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.positiveAspectText,
+                              feedbackRating === val && { color: '#0b1120', fontWeight: '700' },
+                            ]}
+                          >
+                            ⭐ {val}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <Text style={styles.feedbackLabel}>
+                      {placeDetail.categorySlug === 'comida' ? 'Plato recomendado:' : 'Consejo clave para otros:'}
+                    </Text>
+                    <TextInput
+                      style={styles.feedbackInput}
+                      placeholder={
+                        placeDetail.categorySlug === 'comida'
+                          ? 'Ej. Burrata Pizza Slice'
+                          : 'Ej. Llevar abrigo para el atardecer'
+                      }
+                      placeholderTextColor="#64748b"
+                      value={feedbackRecommended}
+                      onChangeText={setFeedbackRecommended}
+                    />
+
+                    <Text style={styles.feedbackLabel}>Comentario breve:</Text>
+                    <TextInput
+                      style={[styles.feedbackInput, { height: 60 }]}
+                      placeholder="¿Qué tal la experiencia?"
+                      placeholderTextColor="#64748b"
+                      multiline
+                      value={feedbackComment}
+                      onChangeText={setFeedbackComment}
+                    />
+
+                    <View style={styles.feedbackActionsRow}>
+                      <Pressable
+                        onPress={() => setShowFeedbackModal(false)}
+                        style={styles.feedbackCancelBtn}
+                      >
+                        <Text style={styles.feedbackCancelText}>Cancelar</Text>
+                      </Pressable>
+                      <Pressable
+                        disabled={feedbackSubmitting}
+                        onPress={() => void handleCompleteExperience()}
+                        style={styles.feedbackSubmitBtn}
+                      >
+                        <Text style={styles.feedbackSubmitText}>
+                          {feedbackSubmitting ? 'Enviando…' : 'Publicar'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* FASE 5: Opiniones de la Comunidad Exploro */}
+                {placeReviews.length > 0 ? (
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>
+                      Opiniones de la Comunidad ({placeReviews.length})
+                    </Text>
+                    {placeReviews.map((rev) => (
+                      <View key={rev.id} style={styles.communityReviewItem}>
+                        <View style={styles.reviewHeaderRow}>
+                          <Text style={styles.reviewAuthor}>{rev.userName || 'Viajero Exploro'}</Text>
+                          <View
+                            style={
+                              rev.isVerifiedVisit
+                                ? styles.reviewVerifiedChip
+                                : styles.reviewNativeChip
+                            }
+                          >
+                            <Text style={styles.reviewChipText}>
+                              {rev.isVerifiedVisit ? '✓ Visita Verificada' : 'Opinión Nativa'}
+                            </Text>
+                          </View>
+                        </View>
+                        {rev.recommendedItem ? (
+                          <Text style={styles.reviewRecommendedText}>
+                            ✨ Recomendado: {rev.recommendedItem}
+                          </Text>
+                        ) : null}
+                        {rev.comment ? (
+                          <Text style={styles.reviewCommentText}>"{rev.comment}"</Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
                 {/* Actividades disponibles */}
                 {placeDetail.activities.length > 0 ? (
                   <View style={styles.detailSection}>
@@ -1623,5 +1897,197 @@ const styles = StyleSheet.create({
   aiCostText: {
     color: '#64748b',
     fontSize: 11,
+  },
+  // FASE 5: Estilos de Experiencias Propias
+  experienceCard: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    padding: 14,
+    marginTop: 14,
+    gap: 8,
+  },
+  experienceCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  experienceCardTitle: {
+    color: '#38bdf8',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  verifiedVisitBadge: {
+    backgroundColor: '#10b981',
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  verifiedVisitBadgeText: {
+    color: '#0f172a',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  startActivityBtn: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  startActivityBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  activeActivityBox: {
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    borderRadius: 8,
+    padding: 10,
+    gap: 6,
+  },
+  activeActivityTitle: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  activeActivitySub: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  activityActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  verifyGpsBtn: {
+    backgroundColor: '#334155',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  verifyGpsBtnText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  finishExperienceBtn: {
+    backgroundColor: '#10b981',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  finishExperienceBtnText: {
+    color: '#0f172a',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  experienceNoticeText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  feedbackFormBox: {
+    backgroundColor: '#131c31',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#475569',
+    padding: 12,
+    marginTop: 10,
+    gap: 6,
+  },
+  feedbackTitle: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  feedbackSubtitle: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  feedbackLabel: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  feedbackInput: {
+    backgroundColor: '#0b1120',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 6,
+    color: '#f8fafc',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12,
+  },
+  feedbackActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 6,
+  },
+  feedbackCancelBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  feedbackCancelText: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  feedbackSubmitBtn: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  feedbackSubmitText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  communityReviewItem: {
+    backgroundColor: '#131c31',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    gap: 4,
+  },
+  reviewHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reviewAuthor: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reviewVerifiedChip: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  reviewNativeChip: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  reviewChipText: {
+    color: '#34d399',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  reviewRecommendedText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  reviewCommentText: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    fontStyle: 'italic',
   },
 });

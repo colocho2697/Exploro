@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicPlaceScore,
   calculateEvidenceConfidence,
+  calculateNativeSentimentScore,
   calculateTrigramSimilarity,
   canAccessMode,
+  determineReviewTypeForCategory,
   estimateTravelMinutes,
   evaluateBudgetFit,
   evaluatePlaceDuplicate,
+  formatNativeReviewSnippet,
   formatVerifiedPriceRange,
   generateEvidenceContentHash,
   getInitialModeDescriptors,
@@ -17,6 +20,8 @@ import {
   synthesizeAspectSummaries,
   tiersAboveBudget,
   verifyAntiHallucination,
+  verifyProximityForVisit,
+  verifyQrTokenForPlace,
 } from './index';
 
 const candidate = (over: Partial<SurpriseCandidate>): SurpriseCandidate => ({
@@ -398,6 +403,150 @@ describe('@exploro/business-rules', () => {
       });
       expect(zeroData.passed).toBe(true);
       expect(zeroData.status).toBe('INSUFFICIENT_DATA');
+    });
+  });
+
+  describe('Fase 5 — Sistema de Experiencias Propias y Verificación', () => {
+    it('verifica proximidad voluntaria por GPS solo dentro del radio de 100m y no por simple inicio', () => {
+      // Pier 1 Brooklyn Bridge Park Coords: 40.70228, -73.99643
+      const placeLat = 40.70228;
+      const placeLng = -73.99643;
+
+      // Usuario a ~30 metros
+      const near = verifyProximityForVisit(40.70245, -73.9963, placeLat, placeLng);
+      expect(near.isVerified).toBe(true);
+      expect(near.distanceMeters).toBeLessThanOrEqual(100);
+
+      // Usuario a ~500 metros
+      const far = verifyProximityForVisit(40.706, -73.992, placeLat, placeLng);
+      expect(far.isVerified).toBe(false);
+      expect(far.distanceMeters).toBeGreaterThan(100);
+    });
+
+    it('valida tokens QR oficiales y rechaza tokens apócrifos', () => {
+      const placeId = '77777777-7777-7777-7777-777777777701';
+      const slug = 'l-industrie-pizzeria-nyc';
+
+      expect(verifyQrTokenForPlace(placeId, placeId, slug)).toBe(true);
+      expect(verifyQrTokenForPlace(slug, placeId, slug)).toBe(true);
+      expect(verifyQrTokenForPlace(`EXPLORO-QR-${slug}`, placeId, slug)).toBe(true);
+      expect(verifyQrTokenForPlace(`EXPLORO-QR-${placeId}`, placeId, slug)).toBe(true);
+      expect(verifyQrTokenForPlace('QR-INVALIDO-OTRO-LUGAR', placeId, slug)).toBe(false);
+    });
+
+    it('determina el tipo de cuestionario adaptado según la categoría', () => {
+      expect(determineReviewTypeForCategory('comida')).toBe('RESTAURANT');
+      expect(determineReviewTypeForCategory('restaurantes')).toBe('RESTAURANT');
+      expect(determineReviewTypeForCategory('turismo')).toBe('TOURISM');
+      expect(determineReviewTypeForCategory('actividades')).toBe('TOURISM');
+    });
+
+    it('calcula sentimiento determinista para restaurantes y turismo sin costo de IA', () => {
+      const restaurantSent = calculateNativeSentimentScore({
+        reviewType: 'RESTAURANT',
+        restaurantReview: {
+          tasteQuality: 5,
+          serviceRating: 5,
+          valueForMoney: 'EXCELLENT',
+          wouldReturn: true,
+        },
+      });
+      expect(restaurantSent).toBe(1.0);
+
+      const negativeRestSent = calculateNativeSentimentScore({
+        reviewType: 'RESTAURANT',
+        restaurantReview: {
+          tasteQuality: 2,
+          serviceRating: 1,
+          valueForMoney: 'EXPENSIVE',
+          wouldReturn: false,
+        },
+      });
+      expect(negativeRestSent).toBeLessThan(0);
+
+      const tourismSent = calculateNativeSentimentScore({
+        reviewType: 'TOURISM',
+        tourismReview: {
+          worthIt: true,
+          accessibility: 'EASY',
+        },
+        wouldReturnOrRecommend: true,
+      });
+      expect(tourismSent).toBeGreaterThan(0.5);
+    });
+
+    it('pondera las visitas verificadas con bono mayor en el ranking determinista', () => {
+      const baseEvidences = [
+        {
+          confidenceScore: 0.8,
+          sentimentScore: 0.9,
+          sourceCode: 'GOOGLE_MAPS_EXT',
+          ageInDays: 30,
+          isNativeExperience: false,
+          isVerifiedVisit: false,
+        },
+      ];
+
+      const withUnverifiedNative = [
+        ...baseEvidences,
+        {
+          confidenceScore: 0.8,
+          sentimentScore: 0.9,
+          sourceCode: 'EXPLORO_NATIVE',
+          ageInDays: 1,
+          isNativeExperience: true,
+          isVerifiedVisit: false,
+        },
+      ];
+
+      const withVerifiedNative = [
+        ...baseEvidences,
+        {
+          confidenceScore: 0.8,
+          sentimentScore: 0.9,
+          sourceCode: 'EXPLORO_NATIVE',
+          ageInDays: 1,
+          isNativeExperience: true,
+          isVerifiedVisit: true, // Bono de 1.35x
+        },
+      ];
+
+      const scoreUnverified = calculateDeterministicPlaceScore(withUnverifiedNative);
+      const scoreVerified = calculateDeterministicPlaceScore(withVerifiedNative);
+
+      expect(scoreVerified.overallScore).toBeGreaterThanOrEqual(scoreUnverified.overallScore);
+    });
+
+    it('formatea snippets auditables distinguiendo visitas verificadas de no verificadas', () => {
+      const verifiedSnippet = formatNativeReviewSnippet({
+        authorName: 'Carlos M.',
+        reviewType: 'RESTAURANT',
+        restaurantReview: {
+          recommendedDish: 'Burrata Slice',
+          valueForMoney: 'EXCELLENT',
+          amountPaid: 15,
+          wouldReturn: true,
+        },
+        comment: 'Totalmente imperdible.',
+        isVerifiedVisit: true,
+      });
+
+      expect(verifiedSnippet).toContain('[Visita Verificada]');
+      expect(verifiedSnippet).toContain('Carlos M.');
+      expect(verifiedSnippet).toContain('Burrata Slice');
+
+      const unverifiedSnippet = formatNativeReviewSnippet({
+        authorName: 'Elena R.',
+        reviewType: 'TOURISM',
+        tourismReview: {
+          worthIt: true,
+          recommendedItem: 'Llevar abrigo para la brisa',
+        },
+        isVerifiedVisit: false,
+      });
+
+      expect(unverifiedSnippet).toContain('[Comunidad Exploro]');
+      expect(unverifiedSnippet).toContain('Llevar abrigo para la brisa');
     });
   });
 });

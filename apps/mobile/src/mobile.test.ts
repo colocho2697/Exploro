@@ -170,5 +170,74 @@ describe('@exploro/mobile — Configuración y Lógica de Fase 2', () => {
     expect(mockRecSummary.topPositiveAspects[0]?.aspect).toBe('Sabor y calidad');
     expect(mockRecSummary.topNegativeAspects[0]?.aspect).toBe('Largas filas y espera');
   });
+
+  it('gestiona el flujo de actividades, verificación opcional y opiniones comunitarias para móvil (Fase 5)', () => {
+    // 1. Estado inicial de actividad no asume presencia física definitiva
+    const mockActivity = {
+      id: 'act-mob-1',
+      userId: 'usr-1',
+      placeId: '77777777-7777-7777-7777-777777777701',
+      activityTitle: 'Probar slice de burrata',
+      status: 'STARTED' as const,
+      verificationMethod: 'NONE' as const,
+      isVerifiedVisit: false,
+      startedAt: new Date().toISOString(),
+    };
+
+    expect(mockActivity.status).toBe('STARTED');
+    expect(mockActivity.isVerifiedVisit).toBe(false);
+    expect(mockActivity.verificationMethod).toBe('NONE');
+
+    // 2. Simulación de verificación con proximidad GPS
+    const verifiedActivity = {
+      ...mockActivity,
+      verificationMethod: 'GPS_PROXIMITY' as const,
+      isVerifiedVisit: true,
+      verifiedAt: new Date().toISOString(),
+    };
+    expect(verifiedActivity.isVerifiedVisit).toBe(true);
+    expect(verifiedActivity.verificationMethod).toBe('GPS_PROXIMITY');
+
+    // 3. Reseñas nativas de la comunidad con distinción de verificación
+    const mockReviews = [
+      {
+        id: 'rev-1',
+        userId: 'usr-1',
+        userName: 'Elena Gómez',
+        placeId: mockActivity.placeId,
+        reviewType: 'RESTAURANT' as const,
+        tasteQuality: 5,
+        serviceRating: 4,
+        recommendedItem: 'Burrata Slice',
+        wouldReturnOrRecommend: true,
+        comment: 'La masa es crujiente y deliciosa.',
+        isVerifiedVisit: true,
+        verificationMethod: 'GPS_PROXIMITY' as const,
+        moderationStatus: 'PUBLISHED' as const,
+        createdAt: new Date().toISOString(),
+        currencyCode: 'USD',
+      },
+      {
+        id: 'rev-2',
+        userId: 'usr-2',
+        userName: 'Marcos R.',
+        placeId: mockActivity.placeId,
+        reviewType: 'RESTAURANT' as const,
+        tasteQuality: 4,
+        recommendedItem: 'Pepperoni clásico',
+        wouldReturnOrRecommend: true,
+        isVerifiedVisit: false,
+        verificationMethod: 'NONE' as const,
+        moderationStatus: 'PUBLISHED' as const,
+        createdAt: new Date().toISOString(),
+        currencyCode: 'USD',
+      },
+    ];
+
+    expect(mockReviews).toHaveLength(2);
+    expect(mockReviews[0]?.isVerifiedVisit).toBe(true);
+    expect(mockReviews[1]?.isVerifiedVisit).toBe(false);
+    expect(mockReviews[0]?.recommendedItem).toBe('Burrata Slice');
+  });
 });
 

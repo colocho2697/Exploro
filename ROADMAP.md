@@ -14,8 +14,8 @@
 | **Fase 2** | Sistema de Descubrimiento | ✅ **Completada y Aprobada (61/61 tests)** | Catálogo completo, Categorías dinámicas, Búsqueda PostGIS con mapa MapLibre `$0`, Tarjetas con evidencias, Favoritos, Colecciones, «Sorpréndeme», Preferencias activables. |
 | **Fase 3** | Integración de Mapas y Fuentes | ✅ **Completada y Validada (82/82 tests)** | OpenFreeMap / MapLibre GL `$0`, Autocompletado y Geocodificación PostGIS/Redis, Cálculo de Rutas sin costo, Conectores legales de fuentes, Sistema de Evidencias y Deduplicación segura. |
 | **Fase 4** | Motor de Inteligencia y Recomendaciones | ✅ **Completada y Validada (97/97 tests)** | Extracción de aspectos en Python/FastAPI ($0.00), Motor de Ranking determinista + explicable, Guardián anti-alucinaciones, Métricas FinOps de IA. |
-| **Fase 5** | Sistema de Experiencias Propias | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Flujo «Comenzar actividad», cuestionarios cortos adaptados (Restaurantes/Turismo), verificación opcional (GPS/QR), integración al ranking. |
-| **Fase 6** | Planificador de Viajes (Oculto) | ⚪ Pendiente | Protegido por Feature Flag: itinerarios manuales y asistidos, flexibilidad horaria (0/15/30/60m), edición inteligente en 3 niveles, reorganización con confirmación. |
+| **Fase 5** | Sistema de Experiencias Propias | ✅ **Completada y Validada (115/115 tests)** | Flujo «Comenzar actividad», cuestionarios cortos adaptados (Restaurantes/Turismo), verificación opcional (GPS/QR), integración inmutable al ranking. |
+| **Fase 6** | Planificador de Viajes (Oculto) | 🟡 **Lista para Iniciar (Esperando Aprobación)** | Protegido por Feature Flag: itinerarios manuales y asistidos, flexibilidad horaria (0/15/30/60m), edición inteligente en 3 niveles, reorganización con confirmación. |
 | **Fase 7** | Administración y Control | ⚪ Pendiente | Panel Admin (`apps/admin`), moderación de evidencias/duplicados, gestión de feature flags y métricas de IA, auditoría inmutable (`audit_logs`). |
 | **Fase 8** | Pruebas, Optimización y Lanzamiento | ⚪ Pendiente | Suite completa E2E/Seguridad/Rendimiento, optimización móvil y de costos, compilación Android/iOS/Web y despliegue progresivo. |
 
@@ -287,6 +287,52 @@
 - **Criterios de aceptación:**
   - Web: Bloque de recomendación en detalle de lugar con badge de puntuación, explicación verificada, chips de aspectos positivos/negativos y sello de auditoría.
   - Mobile: Tarjeta de recomendación inteligente en modal con aspectos positivos, advertencias de viajeros y política de costo cero. *(Completado)*
+
+---
+
+## Desglose Detallado — FASE 5: Sistema de Experiencias Propias (✅ Completada)
+
+> **Estado:** Todas las tareas de la Fase 5 han sido implementadas, probadas al 100% (`23/23` tareas de Turborepo, `115/115` pruebas automatizadas, builds de producción limpios).
+
+### Tarea 5.1 — Registro y Ciclo de Vida de «Comenzar Actividad»
+- **Objetivo:** Implementar la acción «Comenzar actividad» registrando usuario, lugar, actividad, marca temporal y estado (`STARTED`, `COMPLETED`, `CANCELLED`).
+- **Archivos involucrados:** `infrastructure/database/init/03-phase5-experiences.sql`, `apps/api/src/modules/experiences/*`, `packages/shared-types`, `packages/validation`.
+- **Criterios de aceptación:**
+  - `POST /experiences/start`: Registra el inicio de actividad con estado `STARTED` y `verification_method = 'NONE'`.
+  - `GET /experiences/active`: Permite consultar y sincronizar en tiempo real la experiencia activa del usuario. *(Completado)*
+
+### Tarea 5.2 — Cuestionarios Cortos Adaptados (Restaurantes vs. Turismo)
+- **Objetivo:** Solicitar voluntariamente una opinión al finalizar sin abrumar con formularios largos, adaptando las preguntas según la categoría.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `apps/web/src/components/PlaceDetail.tsx`, `apps/mobile/App.tsx`.
+- **Criterios de aceptación:**
+  - Restaurantes: Calidad y sabor, atención, relación calidad-precio, precio pagado, plato recomendado, si volvería y comentario.
+  - Turismo: Si valió la pena, duración invertida, accesibilidad, gasto, recomendación clave y advertencia para otros visitantes. *(Completado)*
+
+### Tarea 5.3 — Verificación Opcional de Visita (GPS y Códigos QR)
+- **Objetivo:** Validar presencia real sin asumir falsamente que el simple inicio prueba la visita.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `apps/api/src/modules/experiences/*`.
+- **Criterios de aceptación:**
+  - `POST /experiences/:id/verify-visit`:
+    - Por GPS: Comprobación con distancia esférica Haversine y PostGIS `ST_DWithin` $\le 100\text{ m}$. Si excede 100m, se rechaza la verificación y se mantiene `NONE`.
+    - Por QR: Validación de tokens oficiales del lugar (`EXPLORO-QR-<slug>`).
+  - Marca `is_verified_visit = TRUE` y método correspondiente únicamente tras superar la comprobación. *(Completado)*
+
+### Tarea 5.4 — Integración Inmutable al Motor de Recomendaciones y Ranking
+- **Objetivo:** Ingestar cada opinión propia como evidencia auditable en `evidences` y recalcular el ranking determinista con bonos de confianza nativos.
+- **Archivos involucrados:** `apps/api/src/modules/experiences/experiences.service.ts`, `packages/business-rules/src/index.ts`.
+- **Criterios de aceptación:**
+  - Creación de fila en `evidences` con `source_code = 'EXPLORO_NATIVE'`.
+  - Ponderación nativa superior: $1.35\times$ para visitas verificadas (confianza 0.95), $1.15\times$ para opiniones no verificadas (confianza 0.75).
+  - Recálculo determinista inmediato de `place_scores` incrementando `total_native_reviews`.
+  - `GET /places/:placeId/reviews`: Listado ordenado priorizando testimonios con visita verificada. *(Completado)*
+
+### Tarea 5.5 — Flujos Visuales en Clientes Web y Mobile
+- **Objetivo:** Integrar la experiencia de usuario completa para inicio, verificación y opiniones en Web y Móvil.
+- **Archivos involucrados:** `apps/web/src/components/PlaceDetail.tsx`, `apps/mobile/App.tsx`, `apps/mobile/src/mobile.test.ts`.
+- **Criterios de aceptación:**
+  - Web: Botón «Comenzar actividad», banner de actividad activa, verificación vía geolocalización del navegador, modal adaptado y lista de opiniones con badge `[✓ Visita Verificada]`.
+  - Mobile: Botón en tarjeta modal, verificación GPS, formulario conciso con selector de calificación por estrellas y listado de opiniones nativas. *(Completado)*
+
 
 
 

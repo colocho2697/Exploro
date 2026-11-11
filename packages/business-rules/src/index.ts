@@ -6,6 +6,9 @@ import {
   ExplorationMode,
   ExtractedAspectItem,
   ModeDescriptor,
+  RestaurantReviewInput,
+  ReviewType,
+  TourismReviewInput,
 } from '@exploro/shared-types';
 
 /**
@@ -579,10 +582,12 @@ export function evaluatePlaceDuplicate(params: {
  */
 export function generateEvidenceContentHash(
   sourceCode: string,
-  externalUrl: string | null | undefined,
-  snippet: string
+  externalUrlOrSnippet: string | null | undefined,
+  snippet?: string
 ): string {
-  const payload = `${sourceCode.trim()}|${(externalUrl ?? '').trim()}|${snippet.trim()}`;
+  const url = snippet !== undefined ? (externalUrlOrSnippet ?? '') : '';
+  const text = snippet !== undefined ? snippet : (externalUrlOrSnippet ?? '');
+  const payload = `${(sourceCode ?? '').trim()}|${url.trim()}|${text.trim()}`;
 
   // Dos hashes FNV-1a de 32 bits con semillas distintas para 64 bits de entropía
   let h1 = 0x811c9dc5;
@@ -832,5 +837,226 @@ export function verifyAntiHallucination(params: {
     status: evidencesCount >= 2 ? 'CONFIRMED' : 'UNVERIFIED',
   };
 }
+
+// ============================================================================
+// FASE 5: REGLAS DE NEGOCIO PARA EXPERIENCIAS PROPIAS Y VERIFICACIÓN
+// ============================================================================
+
+/**
+ * Regla de Negocio (Paso 5.5):
+ * Verificación opcional de visita mediante proximidad voluntaria GPS.
+ * Compara la posición del usuario con el lugar usando Haversine esférico.
+ * Si distancia <= maxDistanceMeters (por defecto 100m) -> visita verificada.
+ * Principio: "No utilizar el simple inicio de una actividad como prueba definitiva de visita."
+ */
+export function verifyProximityForVisit(
+  userLat: number,
+  userLng: number,
+  placeLat: number,
+  placeLng: number,
+  maxDistanceMeters = 100
+): { isVerified: boolean; distanceMeters: number } {
+  const R = 6371000; // Radio de la Tierra en metros
+  const dLat = ((placeLat - userLat) * Math.PI) / 180;
+  const dLng = ((placeLng - userLng) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((userLat * Math.PI) / 180) *
+      Math.cos((placeLat * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distanceMeters = Math.round(R * c);
+
+  return {
+    isVerified: distanceMeters <= maxDistanceMeters,
+    distanceMeters,
+  };
+}
+
+/**
+ * Regla de Negocio (Paso 5.5):
+ * Verificación opcional mediante escaneo de código QR en el establecimiento o lugar.
+ * Valida contra UUID del lugar, slug o token formateado "EXPLORO-QR-<slug/uuid>".
+ */
+export function verifyQrTokenForPlace(
+  token: string,
+  placeId: string,
+  placeSlug?: string
+): boolean {
+  if (!token || !token.trim()) return false;
+  const cleanToken = token.trim();
+
+  // Coincidencia exacta con UUID
+  if (cleanToken.toLowerCase() === placeId.toLowerCase()) return true;
+
+  // Coincidencia exacta con Slug
+  if (placeSlug && cleanToken.toLowerCase() === placeSlug.toLowerCase()) return true;
+
+  // Formato oficial de token Exploro QR
+  const prefixMatch = cleanToken.match(/^EXPLORO-QR-(.+)$/i);
+  if (prefixMatch) {
+    const payload = prefixMatch[1].toLowerCase();
+    if (payload === placeId.toLowerCase()) return true;
+    if (placeSlug && payload === placeSlug.toLowerCase()) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Regla de Negocio (Paso 5.2):
+ * Determina el tipo de cuestionario breve adaptado según la categoría del lugar.
+ * Evita formularios largos; adapta las preguntas a comida vs turismo.
+ */
+export function determineReviewTypeForCategory(categorySlug: string): ReviewType {
+  const norm = categorySlug.toLowerCase().trim();
+  if (norm === 'comida' || norm === 'restaurantes' || norm === 'gastronomia') {
+    return 'RESTAURANT';
+  }
+  return 'TOURISM';
+}
+
+/**
+ * Regla de Negocio (Paso 5.3, 5.4, 5.6):
+ * Calcula el sentimiento normalizado (-1 a +1) de una opinión de experiencia nativa
+ * sin recurrir a LLMs, garantizando predictibilidad y costo cero ($0.00).
+ */
+export function calculateNativeSentimentScore(params: {
+  reviewType: ReviewType;
+  restaurantReview?: RestaurantReviewInput;
+  tourismReview?: TourismReviewInput;
+  wouldReturnOrRecommend?: boolean;
+}): number {
+  const { reviewType, restaurantReview, tourismReview, wouldReturnOrRecommend } = params;
+
+  if (reviewType === 'RESTAURANT' && restaurantReview) {
+    let scoreSum = 0;
+    let components = 0;
+
+    if (restaurantReview.tasteQuality !== undefined) {
+      scoreSum += ((restaurantReview.tasteQuality - 1) / 4) * 2 - 1;
+      components++;
+    }
+
+    if (restaurantReview.serviceRating !== undefined) {
+      scoreSum += ((restaurantReview.serviceRating - 1) / 4) * 2 - 1;
+      components++;
+    }
+
+    if (restaurantReview.valueForMoney) {
+      if (restaurantReview.valueForMoney === 'EXCELLENT') scoreSum += 1.0;
+      else if (restaurantReview.valueForMoney === 'FAIR') scoreSum += 0.3;
+      else if (restaurantReview.valueForMoney === 'EXPENSIVE') scoreSum -= 0.6;
+      components++;
+    }
+
+    if (restaurantReview.wouldReturn !== undefined) {
+      scoreSum += restaurantReview.wouldReturn ? 1.0 : -1.0;
+      components++;
+    }
+
+    if (components === 0) return 0.5;
+    return Number((scoreSum / components).toFixed(2));
+  }
+
+  if (reviewType === 'TOURISM' && tourismReview) {
+    let scoreSum = 0;
+    let components = 0;
+
+    if (tourismReview.worthIt !== undefined) {
+      scoreSum += tourismReview.worthIt ? 1.0 : -0.8;
+      components++;
+    }
+
+    if (tourismReview.accessibility) {
+      if (
+        tourismReview.accessibility === 'WHEELCHAIR_ACCESSIBLE' ||
+        tourismReview.accessibility === 'EASY'
+      ) {
+        scoreSum += 0.5;
+      } else if (tourismReview.accessibility === 'MODERATE') {
+        scoreSum += 0.2;
+      } else {
+        scoreSum -= 0.2;
+      }
+      components++;
+    }
+
+    if (wouldReturnOrRecommend !== undefined) {
+      scoreSum += wouldReturnOrRecommend ? 1.0 : -0.8;
+      components++;
+    }
+
+    if (components === 0) return 0.6;
+    return Number((scoreSum / components).toFixed(2));
+  }
+
+  return wouldReturnOrRecommend !== false ? 0.7 : -0.5;
+}
+
+/**
+ * Regla de Negocio (Paso 5.6):
+ * Formatea un snippet conciso a partir de la experiencia del usuario
+ * para que sirva de evidencia transparente y auditable.
+ */
+export function formatNativeReviewSnippet(params: {
+  authorName: string;
+  reviewType: ReviewType;
+  restaurantReview?: RestaurantReviewInput;
+  tourismReview?: TourismReviewInput;
+  comment?: string;
+  isVerifiedVisit: boolean;
+}): string {
+  const {
+    authorName,
+    reviewType,
+    restaurantReview,
+    tourismReview,
+    comment,
+    isVerifiedVisit,
+  } = params;
+  const verifiedTag = isVerifiedVisit
+    ? '[Visita Verificada]'
+    : '[Comunidad Exploro]';
+  const parts: string[] = [`${verifiedTag} ${authorName}:`];
+
+  if (reviewType === 'RESTAURANT' && restaurantReview) {
+    if (restaurantReview.recommendedDish) {
+      parts.push(`Recomienda el plato "${restaurantReview.recommendedDish}".`);
+    }
+    if (restaurantReview.valueForMoney) {
+      const vMap: Record<string, string> = {
+        EXCELLENT: 'excelente relación calidad-precio',
+        FAIR: 'precio justo',
+        EXPENSIVE: 'precios elevados',
+      };
+      parts.push(`Opina: ${vMap[restaurantReview.valueForMoney] || 'precio estándar'}.`);
+    }
+    if (restaurantReview.amountPaid) {
+      parts.push(`Gasto reportado: $${restaurantReview.amountPaid}.`);
+    }
+    if (restaurantReview.wouldReturn) {
+      parts.push('Definitivamente volvería.');
+    }
+  } else if (reviewType === 'TOURISM' && tourismReview) {
+    if (tourismReview.worthIt) {
+      parts.push('Confirma que valió totalmente la pena.');
+    }
+    if (tourismReview.recommendedItem) {
+      parts.push(`Consejo: "${tourismReview.recommendedItem}".`);
+    }
+    if (tourismReview.caveatOrTip) {
+      parts.push(`Advertencia útil: "${tourismReview.caveatOrTip}".`);
+    }
+  }
+
+  if (comment && comment.trim()) {
+    parts.push(`"${comment.trim()}"`);
+  }
+
+  return parts.join(' ');
+}
+
 
 

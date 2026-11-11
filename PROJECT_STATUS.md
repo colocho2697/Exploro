@@ -1,8 +1,8 @@
 # Estado del Proyecto — Exploro
 
 **Última actualización:** 2026-11-11  
-**Fase Actual:** FASE 4 — Motor de Inteligencia y Recomendaciones (✅ Completada y Verificada al 100%)  
-**Siguiente Fase:** FASE 5 — Sistema de Experiencias Propias *(En espera de revisión y aprobación del propietario para iniciar)*
+**Fase Actual:** FASE 5 — Sistema de Experiencias Propias (✅ Completada y Verificada al 100%)  
+**Siguiente Fase:** FASE 6 — Planificador de Viajes (Oculto bajo Feature Flag) *(En espera de revisión y aprobación del propietario para iniciar)*
 
 ---
 
@@ -12,8 +12,8 @@ Todos los servicios contenedorizados están activos y saludables (`Up (healthy)`
 
 | Contenedor / Servicio | Imagen / Tecnología | Puerto Local | Estado |
 | :--- | :--- | :--- | :--- |
-| **`exploro-postgres-postgis`** | PostgreSQL 16 + PostGIS 3.7.0 + `pg_trgm` | `:5432` | ✅ `Up (healthy)` — 18 tablas + semillas EE. UU. (13 lugares, actividades, fuentes y evidencias) |
-| **`exploro-redis`** | Redis 7 Alpine | `:6379` | ✅ `Up (healthy)` — Caché geoespacial y colas activas |
+| **`exploro-postgres-postgis`** | PostgreSQL 16 + PostGIS 3.7.0 + `pg_trgm` | `:5432` | ✅ `Up (healthy)` — 20 tablas + esquema de experiencias (`activity_logs`, `user_reviews`) y fuente nativa `EXPLORO_NATIVE` |
+| **`exploro-redis`** | Redis 7 Alpine | `:6379` | ✅ `Up (healthy)` — Caché geoespacial, recomendaciones y colas activas |
 | **`exploro-minio-s3`** | MinIO S3-Compatible Object Storage | `:9000` / `:9001` | ✅ `Up (healthy)` — Almacenamiento multimedia `$0` |
 | **`exploro-ai-engine`** | Python 3.12 + FastAPI (en Docker) | `:8000` | ✅ `Up (healthy)` — 8/8 pruebas `pytest` superadas |
 
@@ -25,49 +25,38 @@ Todos los servicios contenedorizados están activos y saludables (`Up (healthy)`
 | :--- | :--- | :--- | :--- |
 | **`@exploro/config`** | `packages/config` | ✅ OK | N/A |
 | **`@exploro/shared-types`** | `packages/shared-types` | ✅ OK | ✅ Verificado en consumidores |
-| **`@exploro/validation`** | `packages/validation` | ✅ OK | ✅ 13 / 13 pruebas unitarias pasando |
-| **`@exploro/business-rules`** | `packages/business-rules` | ✅ OK | ✅ 18 / 18 pruebas unitarias pasando |
-| **`@exploro/api-client`** | `packages/api-client` | ✅ OK | ✅ 2 / 2 pruebas unitarias pasando |
-| **`@exploro/api`** (Backend NestJS) | `apps/api` | ✅ OK | ✅ 42 / 42 pruebas de integración E2E (PostGIS + Redis + AI) pasando |
+| **`@exploro/validation`** | `packages/validation` | ✅ OK | ✅ 16 / 16 pruebas unitarias pasando |
+| **`@exploro/business-rules`** | `packages/business-rules` | ✅ OK | ✅ 24 / 24 pruebas unitarias pasando |
+| **`@exploro/api-client`** | `packages/api-client` | ✅ OK | ✅ 3 / 3 pruebas unitarias pasando |
+| **`@exploro/api`** (Backend NestJS) | `apps/api` | ✅ OK | ✅ 49 / 49 pruebas de integración E2E (PostGIS + Redis + Experiences) pasando |
 | **`@exploro/web`** (Next.js Viajero) | `apps/web` | ✅ OK (`next build` producción) | ✅ 4 / 4 pruebas pasando |
-| **`@exploro/mobile`** (Expo Android/iOS) | `apps/mobile` | ✅ OK (`tsc -p tsconfig.json`) | ✅ 8 / 8 pruebas pasando |
+| **`@exploro/mobile`** (Expo Android/iOS) | `apps/mobile` | ✅ OK (`tsc -p tsconfig.json`) | ✅ 9 / 9 pruebas pasando |
 | **`@exploro/admin`** (Gobernanza) | `apps/admin` | ✅ OK | ✅ 2 / 2 pruebas pasando |
 | **`ai-engine`** (FastAPI en Docker) | `services/ai-engine` | ✅ OK | ✅ 8 / 8 pruebas `pytest` pasando |
-| **TOTAL** | **Pipeline Global** | **✅ 23/23 Tareas de Turborepo** | **✅ 97 / 97 Pruebas Pasando (100% Green)** |
+| **TOTAL** | **Pipeline Global** | **✅ 23/23 Tareas de Turborepo** | **✅ 115 / 115 Pruebas Pasando (100% Green)** |
 
 ---
 
-## 3. Cumplimiento de Criterios de Aceptación de la Fase 4
+## 3. Cumplimiento de Criterios de Aceptación de la Fase 5
 
-- [x] **Procesamiento de Opiniones y Taxonomía de Aspectos (`services/ai-engine` & `@exploro/business-rules`)**:
-  - `POST /internal/v1/opinions/extract-aspects`: Taxonomía para restaurantes (*Sabor y calidad, Atención y servicio, Relación calidad-precio, Ambiente y comodidad, Porciones abundantes, Especialidades*) y turismo (*Experiencia y vista, Accesibilidad, Duración, Costo y gratuidad, Seguridad, Valor cultural, Recomendación imperdible*).
-  - Detección de críticas y advertencias (*Largas filas y espera, Lugar abarrotado o ruidoso, Precios elevados, Atención mejorable*).
-  - Extracción de precios mencionados y actividades sugeridas.
-- [x] **Guardián Anti-Alucinaciones (`FactCheckerGuard` y `verifyAntiHallucination`)**:
-  - Verificación estricta: existencia en catálogo, citas textuales respaldadas en fragmentos y marcado con `INSUFFICIENT_DATA` si faltan evidencias.
-  - Bloqueo de alucinaciones y prevención de hechos falsos.
-- [x] **Motor de Ranking Determinista y Explicable (`calculateDeterministicPlaceScore`)**:
-  - Fórmula matemática reproducible basada en confianza, decaimiento por antigüedad, consistencia y diversidad de fuentes.
-  - No depende de opiniones arbitrarias de un LLM ni de estrellas de terceros.
-- [x] **Módulo de Recomendaciones en Backend NestJS (`apps/api/src/modules/recommendations/`)**:
-  - `GET /places/:placeId/recommendation-summary`: Consulta del resumen explicable con score, nivel de confianza, explicación auditada y aspectos respaldados, con caché Redis.
-  - `POST /places/:placeId/recalculate-aspects`: Extracción y actualización determinista en `place_scores`.
-  - `GET /ai/metrics`: Auditoría FinOps de solicitudes, aspectos extraídos, alucinaciones bloqueadas y costo total de operación ($0.00).
-- [x] **Visualización en Web y Mobile (`apps/web` y `apps/mobile`)**:
-  - Web: Bloque de recomendación explicable en detalle de lugar con badge de puntuación, explicación verificada, chips de aspectos positivos/negativos y sello de auditoría.
-  - Mobile: Tarjeta de recomendación inteligente en modal con aspectos positivos, advertencias de viajeros y política de costo cero.
-- [x] **Verificación Global**:
-  - `pnpm turbo run build typecheck test` completado con éxito (23/23 tareas exitosas, 0 errores, 97/97 pruebas aprobadas).
-
----
-
-## 4. Errores Pendientes
-
-- **Ninguno.** Todos los paquetes compilan sin errores (`0 errors`) y el 100% de las suites de prueba están en verde.
-
----
-
-## 5. Siguiente Paso Exacto
-
-- Presentar el diagnóstico y cierre de la **Fase 4** al propietario del proyecto.
-- Solicitar aprobación formal para iniciar la **Fase 5 — Sistema de Experiencias Propias** (Flujo «Comenzar actividad», cuestionarios cortos adaptados a Restaurantes y Turismo, verificación opcional GPS/QR, integración de experiencias al ranking determinista).
+- [x] **Flujo «Comenzar actividad» (`apps/api` & `activity_logs`)**:
+  - `POST /experiences/start`: Registra el inicio de actividad con usuario autenticado, lugar, título de actividad, hora de inicio y estado `STARTED` (`verification_method = 'NONE'`, `is_verified_visit = false`).
+  - `GET /experiences/active`: Permite recuperar en tiempo real la actividad en progreso del usuario.
+- [x] **Verificación Opcional de Visita (GPS y Códigos QR)**:
+  - `POST /experiences/:id/verify-visit`:
+    - Comprobación esférica Haversine y PostGIS `ST_DWithin` contra las coordenadas reales del lugar ($\le 100\text{ m}$).
+    - Validación de códigos QR oficiales del lugar (`EXPLORO-QR-<slug>`).
+    - Regla inquebrantable respetada: el simple inicio no prueba la visita física; únicamente tras superar la comprobación de proximidad o QR se actualiza a `is_verified_visit = TRUE`.
+- [x] **Cuestionarios Cortos Adaptados por Categoría (Sin formularios largos)**:
+  - Restaurantes: Calidad y sabor (1-5), atención (1-5), relación calidad-precio, gasto en USD, plato recomendado, si volvería y comentario libre.
+  - Turismo: Si valió la pena, tiempo invertido, accesibilidad, gasto en USD, recomendación y qué debería saber otro visitante.
+- [x] **Integración Inmutable al Ranking Determinista**:
+  - `POST /experiences/:id/complete`: Almacena la opinión en `user_reviews` e ingesta automáticamente una evidencia en `evidences` con `source_code = 'EXPLORO_NATIVE'`.
+  - Bono determinista de confianza en ranking: $1.35\times$ para visitas verificadas (confianza 0.95) y $1.15\times$ para opiniones no verificadas (confianza 0.75).
+  - Recálculo inmediato de `place_scores` incrementando `total_native_reviews`.
+- [x] **Experiencia Visual en Web y Móvil**:
+  - Web (`PlaceDetail.tsx`): Botón para iniciar actividad, banner activo con estado de verificación, botón de geolocalización GPS vía navegador, modal de cuestionario adaptado y lista de opiniones comunitarias con badge `[✓ Visita Verificada]`.
+  - Mobile (`App.tsx`): Tarjeta de experiencia propia en modal, verificación de proximidad por coordenadas, selector de estrellas y lista de testimonios nativos.
+- [x] **Verificación Global y Puerta de Calidad**:
+  - `pnpm turbo run build typecheck test` superado con 23/23 tareas exitosas.
+  - 115 pruebas automatizadas pasando al 100% sin costo de APIs externas ($0.00).

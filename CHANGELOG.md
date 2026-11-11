@@ -4,6 +4,37 @@ Todos los cambios importantes en la arquitectura, código, base de datos y docum
 
 ---
 
+## [0.6.0] — 2026-11-11 (Fase 5: Sistema de Experiencias Propias Completada)
+
+### Agregado
+- **Modelo de Datos y Migración de Base de Datos (`03-phase5-experiences.sql`)**:
+  - Tabla `activity_logs`: Registro del ciclo de vida de actividades (`STARTED`, `COMPLETED`, `CANCELLED`), método de verificación (`NONE`, `GPS_PROXIMITY`, `QR_CODE`), marcas temporales e integridad referencial en cascada.
+  - Tabla `user_reviews`: Almacenamiento de opiniones adaptadas por categoría (`taste_quality`, `service_rating`, `value_for_money`, `worth_it`, `duration_spent`, `accessibility`, `amount_paid`, `recommended_item`, `caveat_or_tip`, `would_return_or_recommend`, `is_verified_visit`).
+  - Fuente oficial comunitaria `EXPLORO_NATIVE` configurada con tipo `NATIVE_EXPERIENCE` y peso base de 0.95.
+- **Reglas de Negocio para Experiencias Propias (`packages/business-rules`)**:
+  - `verifyProximityForVisit`: Algoritmo geodésico Haversine esférico que valida presencia física en un radio $\le 100\text{ m}$. Cumple la regla inquebrantable: *el simple inicio de actividad no prueba la visita*.
+  - `verifyQrTokenForPlace`: Validación de tokens QR oficiales del establecimiento (`EXPLORO-QR-<slug/uuid>`).
+  - `determineReviewTypeForCategory`: Clasificación adaptada (`RESTAURANT` para comida, `TOURISM` para turismo y atracciones).
+  - `calculateNativeSentimentScore`: Función determinista que calcula el sentimiento (-1 a +1) a partir de respuestas estructuradas sin costo de IA ($0.00).
+  - Bonos en el ranking determinista: $1.35\times$ para visitas verificadas (confianza 0.95) y $1.15\times$ para opiniones nativas sin verificar (confianza 0.75).
+- **Esquemas de Validación y Tipos Compartidos (`@exploro/validation` & `@exploro/shared-types`)**:
+  - Esquemas Zod: `startActivitySchema`, `verifyVisitSchema`, `restaurantReviewSchema`, `tourismReviewSchema`, `completeActivityReviewSchema`.
+  - Contratos DTO: `ActivityLogDTO`, `VerifyVisitDTO`, `VerifyVisitResponse`, `UserReviewDTO`.
+- **Módulo de Experiencias en Backend NestJS (`apps/api/src/modules/experiences/`)**:
+  - `POST /experiences/start`: Inicio de actividad con usuario autenticado.
+  - `GET /experiences/active`: Consulta y sincronización de actividad en curso.
+  - `POST /experiences/:id/verify-visit`: Verificación opcional por GPS o QR.
+  - `POST /experiences/:id/complete`: Finalización de actividad, inserción de reseña, ingesta automática en `evidences` como fuente `EXPLORO_NATIVE` y recálculo determinista de `place_scores`.
+  - `GET /places/:placeId/reviews`: Consulta de opiniones comunitarias ordenadas por estado de verificación y fecha.
+  - 7 pruebas de integración en `src/phase5.integration.test.ts` (49 pruebas totales en API).
+- **Clientes Web y Mobile (`apps/web` y `apps/mobile`)**:
+  - Web: Botón «Comenzar actividad», banner de actividad activa con verificación GPS del navegador, modal adaptado de preguntas cortas y lista de opiniones con badge `[✓ Visita Verificada]`.
+  - Mobile: Botón de inicio en modal de lugar, verificación de proximidad GPS, selector interactivo de estrellas y listado de opiniones comunitarias.
+- **Verificación Global y Puerta de Calidad**:
+  - Total global: **115 pruebas automatizadas pasando (100% Green)** y 23/23 tareas exitosas en Turborepo.
+
+---
+
 ## [0.5.0] — 2026-11-11 (Fase 4: Motor de Inteligencia y Recomendaciones Completada)
 
 ### Agregado

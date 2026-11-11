@@ -1,4 +1,5 @@
 import {
+  ActivityLogDTO,
   AiFinOpsMetrics,
   ApiResponse,
   AppBootstrapConfig,
@@ -22,8 +23,11 @@ import {
   SourceSyncResult,
   SurpriseMeResponse,
   UserProfile,
+  UserReviewDTO,
+  VerifyVisitResponse,
 } from '@exploro/shared-types';
 import {
+  CompleteActivityReviewInput,
   CreateCollectionInput,
   CreateEvidenceInput,
   CreateSourceInput,
@@ -33,8 +37,10 @@ import {
   GeoRouteInput,
   LoginInput,
   RegisterInput,
+  StartActivityInput,
   SurpriseMeRequestInput,
   UpdatePreferencesInput,
+  VerifyVisitInput,
 } from '@exploro/validation';
 
 export interface ExploroApiClientOptions {
@@ -383,6 +389,61 @@ export class ExploroApiClient {
 
   public async getAiMetrics(): Promise<AiFinOpsMetrics> {
     const res = await this.request<AiFinOpsMetrics>('/ai/metrics');
+    return res.data;
+  }
+
+  // -------------------------------------------------------------------------
+  // FASE 5: Experiencias Propias, Verificación y Opiniones Adaptadas
+  // -------------------------------------------------------------------------
+
+  public async startActivity(data: StartActivityInput): Promise<ActivityLogDTO> {
+    const res = await this.request<ActivityLogDTO>('/experiences/start', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+  }
+
+  public async getActiveActivity(): Promise<ActivityLogDTO | null> {
+    const res = await this.request<ActivityLogDTO | null>('/experiences/active');
+    return res.data;
+  }
+
+  public async verifyActivityVisit(
+    activityId: string,
+    data: VerifyVisitInput
+  ): Promise<VerifyVisitResponse> {
+    const res = await this.request<VerifyVisitResponse>(
+      `/experiences/${encodeURIComponent(activityId)}/verify-visit`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async completeActivityWithReview(
+    activityId: string,
+    data: CompleteActivityReviewInput
+  ): Promise<UserReviewDTO> {
+    const res = await this.request<UserReviewDTO>(
+      `/experiences/${encodeURIComponent(activityId)}/complete`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async getPlaceReviews(
+    placeId: string,
+    limit = 20
+  ): Promise<UserReviewDTO[]> {
+    const res = await this.request<UserReviewDTO[]>(
+      `/places/${encodeURIComponent(placeId)}/reviews?limit=${limit}`
+    );
     return res.data;
   }
 }

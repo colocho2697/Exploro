@@ -9,8 +9,11 @@ import {
   geoAutocompleteQuerySchema,
   geoRouteSchema,
   registerSchema,
+  startActivitySchema,
   surpriseMeRequestSchema,
   updatePreferencesSchema,
+  verifyVisitSchema,
+  completeActivityReviewSchema,
 } from './index';
 
 describe('@exploro/validation schemas', () => {
@@ -205,6 +208,70 @@ describe('@exploro/validation schemas', () => {
       evidences: [],
     });
     expect(invalidUuid.success).toBe(false);
+  });
+
+  // FASE 5: Pruebas de esquemas de actividades, verificación y opiniones adaptadas
+  it('valida el inicio de actividad con lugar válido (Fase 5)', () => {
+    const valid = startActivitySchema.parse({
+      placeId: '77777777-7777-7777-7777-777777777701',
+      activityTitle: 'Probar slice de Burrata',
+    });
+    expect(valid.placeId).toBe('77777777-7777-7777-7777-777777777701');
+    expect(valid.activityTitle).toBe('Probar slice de Burrata');
+
+    const invalidUuid = startActivitySchema.safeParse({
+      placeId: 'invalid-id',
+    });
+    expect(invalidUuid.success).toBe(false);
+  });
+
+  it('valida la verificación de visita por GPS o QR y rechaza payloads vacíos (Fase 5)', () => {
+    const validGps = verifyVisitSchema.parse({
+      latitude: 40.7128,
+      longitude: -74.006,
+    });
+    expect(validGps.latitude).toBe(40.7128);
+
+    const validQr = verifyVisitSchema.parse({
+      qrToken: 'EXPLORO-QR-BROOKLYN-PIER1',
+    });
+    expect(validQr.qrToken).toBe('EXPLORO-QR-BROOKLYN-PIER1');
+
+    const invalidEmpty = verifyVisitSchema.safeParse({});
+    expect(invalidEmpty.success).toBe(false);
+  });
+
+  it('valida el formulario corto y adaptado de opiniones de restaurantes y turismo (Fase 5)', () => {
+    const restaurantReview = completeActivityReviewSchema.parse({
+      reviewType: 'RESTAURANT',
+      restaurantReview: {
+        tasteQuality: 5,
+        serviceRating: 4,
+        valueForMoney: 'EXCELLENT',
+        amountPaid: 16.5,
+        recommendedDish: 'Burrata Pizza Slice',
+        wouldReturn: true,
+        comment: 'Increíble corteza crujiente.',
+      },
+      wouldReturnOrRecommend: true,
+    });
+    expect(restaurantReview.reviewType).toBe('RESTAURANT');
+    expect(restaurantReview.restaurantReview?.tasteQuality).toBe(5);
+
+    const tourismReview = completeActivityReviewSchema.parse({
+      reviewType: 'TOURISM',
+      tourismReview: {
+        worthIt: true,
+        durationSpent: '1_TO_2_HOURS',
+        amountPaid: 0,
+        accessibility: 'EASY',
+        recommendedItem: 'Vistas del sunset hacia Manhattan',
+        caveatOrTip: 'Llegar temprano para encontrar lugar en la banca.',
+      },
+      wouldReturnOrRecommend: true,
+    });
+    expect(tourismReview.reviewType).toBe('TOURISM');
+    expect(tourismReview.tourismReview?.worthIt).toBe(true);
   });
 });
 

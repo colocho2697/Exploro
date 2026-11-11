@@ -247,6 +247,74 @@ export const recalculateAspectsSchema = z.object({
   forceRefresh: z.boolean().default(false),
 });
 
+// FASE 5: Esquemas de Actividades Propias, Verificación y Reseñas Adaptadas
+export const activityLogStatusSchema = z.enum(['STARTED', 'COMPLETED', 'CANCELLED']);
+export const visitVerificationMethodSchema = z.enum(['NONE', 'GPS_PROXIMITY', 'QR_CODE']);
+export const reviewTypeSchema = z.enum(['RESTAURANT', 'TOURISM', 'GENERAL']);
+export const restaurantValueForMoneySchema = z.enum(['EXCELLENT', 'FAIR', 'EXPENSIVE']);
+export const tourismDurationSpentSchema = z.enum([
+  'UNDER_1_HOUR',
+  '1_TO_2_HOURS',
+  '2_TO_4_HOURS',
+  'HALF_DAY',
+  'FULL_DAY',
+]);
+export const tourismAccessibilitySchema = z.enum([
+  'EASY',
+  'MODERATE',
+  'DIFFICULT',
+  'WHEELCHAIR_ACCESSIBLE',
+]);
+
+export const startActivitySchema = z.object({
+  placeId: z.string().uuid('Identificador de lugar inválido'),
+  activityId: z.string().uuid('Identificador de actividad inválido').optional(),
+  activityTitle: z.string().trim().min(2).max(180).default('Visita libre'),
+});
+
+export const verifyVisitSchema = z
+  .object({
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    qrToken: z.string().trim().min(3).max(255).optional(),
+  })
+  .refine(
+    (data) =>
+      (data.latitude !== undefined && data.longitude !== undefined) || !!data.qrToken,
+    {
+      message:
+        'Debe proporcionar coordenadas de geolocalización o un código QR para verificar la visita',
+    }
+  );
+
+export const restaurantReviewSchema = z.object({
+  tasteQuality: z.number().int().min(1).max(5).optional(),
+  serviceRating: z.number().int().min(1).max(5).optional(),
+  valueForMoney: restaurantValueForMoneySchema.optional(),
+  amountPaid: z.number().min(0).max(10000).optional(),
+  recommendedDish: z.string().trim().max(255).optional(),
+  wouldReturn: z.boolean().default(true),
+  comment: z.string().trim().max(2000).optional(),
+});
+
+export const tourismReviewSchema = z.object({
+  worthIt: z.boolean().default(true),
+  durationSpent: tourismDurationSpentSchema.optional(),
+  amountPaid: z.number().min(0).max(10000).optional(),
+  accessibility: tourismAccessibilitySchema.optional(),
+  recommendedItem: z.string().trim().max(255).optional(),
+  caveatOrTip: z.string().trim().max(1000).optional(),
+  comment: z.string().trim().max(2000).optional(),
+});
+
+export const completeActivityReviewSchema = z.object({
+  reviewType: reviewTypeSchema.default('GENERAL'),
+  restaurantReview: restaurantReviewSchema.optional(),
+  tourismReview: tourismReviewSchema.optional(),
+  generalComment: z.string().trim().max(2000).optional(),
+  wouldReturnOrRecommend: z.boolean().default(true),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
@@ -267,6 +335,12 @@ export type DetectDuplicatesQueryInput = z.infer<typeof detectDuplicatesQuerySch
 export type ExtractAspectsBodyInput = z.infer<typeof extractAspectsBodySchema>;
 export type ExplainPlaceBodyInput = z.infer<typeof explainPlaceBodySchema>;
 export type RecalculateAspectsInput = z.infer<typeof recalculateAspectsSchema>;
+export type StartActivityInput = z.infer<typeof startActivitySchema>;
+export type VerifyVisitInput = z.infer<typeof verifyVisitSchema>;
+export type RestaurantReviewInput = z.infer<typeof restaurantReviewSchema>;
+export type TourismReviewInput = z.infer<typeof tourismReviewSchema>;
+export type CompleteActivityReviewInput = z.infer<typeof completeActivityReviewSchema>;
+
 
 
 
