@@ -127,3 +127,4 @@ export function resolveLocationStrategy(
 export function validateBatteryFriendlyInterval(intervalMs: number): boolean {
   return intervalMs >= 30000;
 }
+

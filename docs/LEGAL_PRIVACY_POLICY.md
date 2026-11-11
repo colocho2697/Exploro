@@ -69,3 +69,4 @@ We process collected data exclusively to:
 For inquiries regarding your personal data, rights, or deletion requests:
 - **Email:** privacy@exploro.travel
 - **Website:** https://exploro.travel/privacy
+

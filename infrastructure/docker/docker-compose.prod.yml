@@ -120,3 +120,4 @@ volumes:
   exploro_prod_pg_data:
   exploro_prod_redis_data:
   exploro_prod_minio_data:
+

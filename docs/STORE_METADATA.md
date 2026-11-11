@@ -86,3 +86,4 @@ Exploro launches strategically with a city-by-city rollout plan focused on high-
 5. **Los Angeles, CA (`los-angeles`):** Distinct neighborhoods, arts, and culinary hubs.
 6. **Austin, TX (`austin`):** Live music, BBQ, outdoor recreation.
 7. **Seattle, WA (`seattle`):** Pacific Northwest nature, coffee culture, waterfront markets.
+

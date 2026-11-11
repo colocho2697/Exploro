@@ -74,3 +74,4 @@ docker compose -f infrastructure/docker/docker-compose.prod.yml up -d
 - [ ] **Guest Exploration:** Categories and places can be queried without an authentication prompt.
 - [ ] **Trip Planner Feature Flag:** Verify `trip_planner_enabled` defaults to `false` for public clients until explicitly enabled in `AdminControlPanel`.
 - [ ] **Admin Security:** Verify unauthorized requests to `/admin/*` return `403 Forbidden` and every admin action records in `audit_logs`.
+
