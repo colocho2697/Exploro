@@ -110,7 +110,7 @@ describe('Fase 4 — Motor de Inteligencia y Recomendaciones', () => {
   it('devuelve INSUFFICIENT_DATA sin alucinar hechos falsos cuando un lugar no tiene evidencias', async () => {
     // Inserta un lugar temporal sin evidencias
     const cityRes = await db.query<{ id: string }>(`SELECT id FROM cities WHERE slug = 'new-york'`);
-    const catRes = await db.query<{ id: string }>(`SELECT id FROM categories WHERE slug = 'comida'`);
+    const catRes = await db.query<{ id: string }>(`SELECT id FROM categories WHERE slug = 'eventos'`);
     const cityId = cityRes.rows[0]!.id;
     const catId = catRes.rows[0]!.id;
 
