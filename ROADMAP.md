@@ -333,6 +333,55 @@
   - Web: Botón «Comenzar actividad», banner de actividad activa, verificación vía geolocalización del navegador, modal adaptado y lista de opiniones con badge `[✓ Visita Verificada]`.
   - Mobile: Botón en tarjeta modal, verificación GPS, formulario conciso con selector de calificación por estrellas y listado de opiniones nativas. *(Completado)*
 
+---
+
+## Desglose Detallado — FASE 6: Planificador de Viajes — Oculto bajo Feature Flag (✅ Completada)
+
+> **Estado:** Fase 6 implementada, probada y validada en su totalidad con 133 pruebas pasando en el monorepo. Permanece oculta para usuarios públicos mediante `trip_planner_enabled = false` en `feature_flags` y guardia de bypass interno (`x-exploro-internal: true`).
+
+### Tarea 6.1 — Modelo de Datos para Viajes, Días e Ítems (`04-phase6-trips.sql`)
+- **Objetivo:** Crear tablas relacionales con soporte geoespacial para viajes (`trips`), días (`trip_days`) e ítems cronológicos de actividades (`trip_items`).
+- **Archivos involucrados:** `infrastructure/database/init/04-phase6-trips.sql`.
+- **Criterios de aceptación:**
+  - Restricciones de integridad referencial en cascada y check constraints (`budget_tier`, `status`).
+  - Restricción única `(trip_day_id, order_index)` para el orden secuencial de actividades. *(Completado)*
+
+### Tarea 6.2 — Feature Flag Guard y Endpoints en Backend NestJS (`apps/api`)
+- **Objetivo:** Proteger todos los endpoints del planificador (`/trips/*`) bajo `TripsFeatureFlagGuard`, bloqueando acceso público (HTTP 403) y permitiendo acceso de desarrollo/testing vía `x-exploro-internal: true`.
+- **Archivos involucrados:** `apps/api/src/modules/trips/trips.guard.ts`, `apps/api/src/modules/trips/trips.service.ts`, `apps/api/src/modules/trips/trips.controller.ts`.
+- **Criterios de aceptación:**
+  - CRUD completo de viajes, días automáticos y actividades.
+  - Cálculo de distancias y tiempos de traslado entre lugares consecutivos usando PostGIS `ST_Distance(p1.location, p2.location)` ($0.00). *(Completado)*
+
+### Tarea 6.3 — Motor de Planificación Asistida Determinista (Paso 6.2 y 6.3)
+- **Objetivo:** Generar itinerarios lógicos y balanceados agrupando actividades por proximidad y bloques horarios (Mañana, Almuerzo, Tarde, Cena) sin alucinaciones ni costos de tokens.
+- **Archivos involucrados:** `apps/api/src/modules/trips/trips.service.ts`, `packages/business-rules/src/index.ts`.
+- **Criterios de aceptación:**
+  - `POST /trips/assisted-plan`: Asigna lugares según reputación determinista y categoría adecuada para el horario. *(Completado)*
+
+### Tarea 6.4 — Clasificación de Alternativas en 3 Niveles (Paso 6.4)
+- **Objetivo:** Al seleccionar un lugar, ofrecer alternativas inteligentes clasificadas en tres niveles objetivos.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `apps/api/src/modules/trips/trips.service.ts`.
+- **Criterios de aceptación:**
+  - `verySimilar` (Nivel 1): Misma categoría, distancia $\le 2.5\text{ km}$, duración similar ($\le 45\text{ min}$).
+  - `relatedExperiences` (Nivel 2): Experiencias complementarias en la misma zona ($\le 6\text{ km}$).
+  - `requiresAdjustments` (Nivel 3): Opciones de alto valor que requieren mayor traslado ($> 6\text{ km}$) o reprogramación. *(Completado)*
+
+### Tarea 6.5 — Reorganización Inteligente con Gobernanza y Sin Modificaciones Silenciosas (Paso 6.6)
+- **Objetivo:** Proponer ajustes en horarios de actividades posteriores cuando una actividad se retrasa o prolonga, explicando el motivo al usuario y exigiendo aprobación explícita antes de mutar la base de datos.
+- **Archivos involucrados:** `packages/business-rules/src/index.ts`, `apps/api/src/modules/trips/trips.service.ts`.
+- **Criterios de aceptación:**
+  - `POST /trips/:id/items/:itemId/reorganize-preview`: Previsualización con explicaciones detalladas y bandera `scheduleOverflowsDay` si excede las 23:30.
+  - `POST /trips/:id/apply-reorganization`: Aplicación atómica de desplazamientos únicamente tras la confirmación del usuario. *(Completado)*
+
+### Tarea 6.6 — Vistas Protegidas en Clientes Web y Mobile
+- **Objetivo:** Desarrollar interfaces para el planificador de viajes asistido en Next.js y Expo, con selectores de modo interno.
+- **Archivos involucrados:** `apps/web/src/components/TripPlannerPanel.tsx`, `apps/web/src/app/page.tsx`, `apps/mobile/App.tsx`, `apps/mobile/src/mobile.test.ts`.
+- **Criterios de aceptación:**
+  - Web: Panel flotante con selector de viajes, días, modal de 3 niveles de alternativas y previsualización interactiva de reorganización.
+  - Mobile: Pestaña `🗺️ Viajes`, tarjetas de itinerario, modal de alternativas en 3 niveles y ajuste de horarios con bypass interno para testing. *(Completado)*
+
+
 
 
 

@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyReorganizationSchema,
+  assistedPlanRequestSchema,
+  completeActivityReviewSchema,
   coordinatesSchema,
   createEvidenceSchema,
   createSourceSchema,
+  createTripItemSchema,
+  createTripSchema,
   discoverPlacesQuerySchema,
   explainPlaceBodySchema,
   extractAspectsBodySchema,
   geoAutocompleteQuerySchema,
   geoRouteSchema,
   registerSchema,
+  reorderTripItemsSchema,
   startActivitySchema,
   surpriseMeRequestSchema,
   updatePreferencesSchema,
   verifyVisitSchema,
-  completeActivityReviewSchema,
 } from './index';
 
 describe('@exploro/validation schemas', () => {
@@ -272,6 +277,77 @@ describe('@exploro/validation schemas', () => {
     });
     expect(tourismReview.reviewType).toBe('TOURISM');
     expect(tourismReview.tourismReview?.worthIt).toBe(true);
+  });
+
+  // FASE 6: Pruebas de esquemas del Planificador de Viajes
+  it('valida la creación de un viaje con rango de fechas y estilos combinados (Fase 6)', () => {
+    const valid = createTripSchema.parse({
+      citySlug: 'new-york',
+      title: 'Escapada cultural y gastronómica a NYC',
+      startDate: '2026-12-01',
+      endDate: '2026-12-04',
+      budgetTier: 'MEDIUM',
+      travelStyles: ['CULTURAL', 'GASTRONOMICO'],
+      flexibilityMinutes: 30,
+    });
+
+    expect(valid.title).toBe('Escapada cultural y gastronómica a NYC');
+    expect(valid.travelStyles).toEqual(['CULTURAL', 'GASTRONOMICO']);
+    expect(valid.flexibilityMinutes).toBe(30);
+
+    // Fecha fin anterior a fecha inicio
+    const invalidDates = createTripSchema.safeParse({
+      title: 'Viaje inválido',
+      startDate: '2026-12-10',
+      endDate: '2026-12-05',
+    });
+    expect(invalidDates.success).toBe(false);
+  });
+
+  it('valida la solicitud de planificación asistida con estilos y flexibilidad (Fase 6)', () => {
+    const valid = assistedPlanRequestSchema.parse({
+      citySlug: 'new-york',
+      startDate: '2026-12-01',
+      endDate: '2026-12-03',
+      budgetTier: 'LOW',
+      travelStyles: ['FAMILIAR', 'NATURALEZA'],
+      flexibilityMinutes: 15,
+    });
+    expect(valid.citySlug).toBe('new-york');
+    expect(valid.travelStyles).toHaveLength(2);
+
+    const missingStyles = assistedPlanRequestSchema.safeParse({
+      citySlug: 'new-york',
+      startDate: '2026-12-01',
+      endDate: '2026-12-03',
+      travelStyles: [],
+    });
+    expect(missingStyles.success).toBe(false);
+  });
+
+  it('valida ítems de itinerario y reordenamiento (Fase 6)', () => {
+    const item = createTripItemSchema.parse({
+      placeId: '77777777-7777-7777-7777-777777777701',
+      customTitle: 'Almuerzo pizza burrata',
+      startTime: '13:00',
+      durationMinutes: 45,
+    });
+    expect(item.startTime).toBe('13:00');
+    expect(item.durationMinutes).toBe(45);
+
+    const reorder = reorderTripItemsSchema.parse({
+      itemIdsInOrder: [
+        '77777777-7777-7777-7777-777777777701',
+        '77777777-7777-7777-7777-777777777702',
+      ],
+    });
+    expect(reorder.itemIdsInOrder).toHaveLength(2);
+
+    const reorg = applyReorganizationSchema.parse({
+      shiftMinutes: 30,
+      affectedItemIds: ['77777777-7777-7777-7777-777777777702'],
+    });
+    expect(reorg.shiftMinutes).toBe(30);
   });
 });
 

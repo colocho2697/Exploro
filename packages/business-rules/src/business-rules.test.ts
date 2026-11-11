@@ -5,16 +5,20 @@ import {
   calculateNativeSentimentScore,
   calculateTrigramSimilarity,
   canAccessMode,
+  classifyActivityAlternatives,
+  detectReorganizationImpact,
   determineReviewTypeForCategory,
   estimateTravelMinutes,
   evaluateBudgetFit,
   evaluatePlaceDuplicate,
+  evaluateScheduleCompatibility,
   formatNativeReviewSnippet,
   formatVerifiedPriceRange,
   generateEvidenceContentHash,
   getInitialModeDescriptors,
   normalizePlaceName,
   resolveSafeRecommendationReason,
+  ScheduleCandidateInput,
   selectSurpriseSuggestions,
   SurpriseCandidate,
   synthesizeAspectSummaries,
@@ -547,6 +551,153 @@ describe('@exploro/business-rules', () => {
 
       expect(unverifiedSnippet).toContain('[Comunidad Exploro]');
       expect(unverifiedSnippet).toContain('Llevar abrigo para la brisa');
+    });
+  });
+
+  describe('Fase 6 — Planificador de Viajes (Oculto) y Motor de Itinerarios', () => {
+    it('evalúa compatibilidad horaria evitando horarios imposibles o fuera de operación (Paso 6.3)', () => {
+      // 1. Horario imposible: inicio después de 23:00 con 2 horas de duración
+      const impossibleLate = evaluateScheduleCompatibility({
+        startHour: 22.5,
+        durationMinutes: 120,
+        transitMinutes: 15,
+        flexibilityMinutes: 0,
+      });
+      expect(impossibleLate.compatible).toBe(false);
+      expect(impossibleLate.reason).toContain('horario imposible');
+
+      // 2. Horario antes de 07:00 am
+      const impossibleEarly = evaluateScheduleCompatibility({
+        startHour: 5.5,
+        durationMinutes: 60,
+        transitMinutes: 15,
+        flexibilityMinutes: 0,
+      });
+      expect(impossibleEarly.compatible).toBe(false);
+
+      // 3. Ajuste inteligente con flexibilidad si abre un poco después (+15m)
+      const adjustedOpening = evaluateScheduleCompatibility({
+        startHour: 9.75, // 09:45
+        durationMinutes: 60,
+        transitMinutes: 15,
+        flexibilityMinutes: 30,
+        openingHour: 10, // Abre a las 10:00
+      });
+      expect(adjustedOpening.compatible).toBe(true);
+      expect(adjustedOpening.adjustedStartHour).toBe(10);
+    });
+
+    it('clasifica alternativas de actividades en 3 niveles oficiales (Paso 6.4)', () => {
+      const original: ScheduleCandidateInput = {
+        placeId: 'orig-1',
+        name: "L'Industrie Pizzeria",
+        slug: 'l-industrie',
+        categorySlug: 'comida',
+        subcategorySlug: 'pizzeria',
+        lat: 40.7153,
+        lng: -73.9592,
+        overallScore: 92,
+        priceTier: 'LOW',
+        estimatedCost: 15,
+        estimatedDurationMins: 45,
+      };
+
+      const candidates: ScheduleCandidateInput[] = [
+        // Nivel 1: Muy similar (misma categoría, < 2.5km, misma duración aprox)
+        {
+          placeId: 'cand-1',
+          name: 'Joe’s Pizza',
+          slug: 'joes-pizza',
+          categorySlug: 'comida',
+          subcategorySlug: 'pizzeria',
+          lat: 40.718,
+          lng: -73.955,
+          overallScore: 89,
+          priceTier: 'LOW',
+          estimatedCost: 12,
+          estimatedDurationMins: 40,
+        },
+        // Nivel 2: Experiencia relacionada (comida/café o turismo cercano < 6km)
+        {
+          placeId: 'cand-2',
+          name: 'Devoción Coffee Roasters',
+          slug: 'devocion-coffee',
+          categorySlug: 'comida',
+          subcategorySlug: 'cafe',
+          lat: 40.722,
+          lng: -73.962,
+          overallScore: 86,
+          priceTier: 'LOW',
+          estimatedCost: 8,
+          estimatedDurationMins: 30,
+        },
+        // Nivel 3: Requiere ajustes (más lejos, > 8km)
+        {
+          placeId: 'cand-3',
+          name: 'Central Park Boathouse',
+          slug: 'central-park-boathouse',
+          categorySlug: 'turismo',
+          lat: 40.775,
+          lng: -73.968,
+          overallScore: 90,
+          priceTier: 'HIGH',
+          estimatedCost: 45,
+          estimatedDurationMins: 90,
+        },
+      ];
+
+      const classified = classifyActivityAlternatives(original, candidates, 15);
+
+      expect(classified.verySimilar).toHaveLength(1);
+      expect(classified.verySimilar[0]?.placeId).toBe('cand-1');
+
+      expect(classified.relatedExperiences).toHaveLength(1);
+      expect(classified.relatedExperiences[0]?.placeId).toBe('cand-2');
+
+      expect(classified.requiresAdjustments).toHaveLength(1);
+      expect(classified.requiresAdjustments[0]?.placeId).toBe('cand-3');
+    });
+
+    it('detecta impacto de reorganización sin modificar unilateralmente y calcula desplazamientos (Paso 6.6)', () => {
+      const dayItems = [
+        {
+          id: 'item-1',
+          placeName: 'Museo de Historia Natural',
+          startTime: '10:00',
+          durationMinutes: 90, // Termina a las 11:30
+          transitMinutesFromPrev: 0,
+        },
+        {
+          id: 'item-2',
+          placeName: 'Almuerzo en Café cercano',
+          startTime: '11:45',
+          durationMinutes: 45, // Termina a las 12:30
+          transitMinutesFromPrev: 15,
+        },
+        {
+          id: 'item-3',
+          placeName: 'Caminata en Central Park',
+          startTime: '13:00',
+          durationMinutes: 60,
+          transitMinutesFromPrev: 15,
+        },
+      ];
+
+      // El usuario extiende el museo de 90 a 150 minutos (termina a las 12:30)
+      // Con 15 min de traslado hacia el café, el café ahora debe iniciar a las 12:45 (+60 min de desplazamiento)
+      const impact = detectReorganizationImpact({
+        modifiedItemId: 'item-1',
+        newStartTime: '10:00',
+        newDurationMinutes: 150,
+        currentItems: dayItems,
+        flexibilityMinutes: 15,
+      });
+
+      expect(impact.requiresApproval).toBe(true);
+      expect(impact.affectedCount).toBeGreaterThan(0);
+      expect(impact.shiftedItems[0]?.itemId).toBe('item-2');
+      expect(impact.shiftedItems[0]?.proposedStartTime).toBe('12:45');
+      expect(impact.reason).toContain('requiere desplazar');
     });
   });
 });

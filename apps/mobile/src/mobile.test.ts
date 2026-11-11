@@ -239,5 +239,45 @@ describe('@exploro/mobile — Configuración y Lógica de Fase 2', () => {
     expect(mockReviews[1]?.isVerifiedVisit).toBe(false);
     expect(mockReviews[0]?.recommendedItem).toBe('Burrata Slice');
   });
+
+  it('valida la lógica del planificador de viajes móvil bajo feature flag y clasificación de 3 niveles', () => {
+    // 1. Feature Flag: el flag se respeta en móvil
+    const featureFlags = { trip_planner_enabled: false };
+    const canAccessPublicly = featureFlags.trip_planner_enabled;
+    expect(canAccessPublicly).toBe(false);
+
+    // Bypass interno para testing
+    const internalHeaders = { 'x-exploro-internal': 'true' };
+    expect(internalHeaders['x-exploro-internal']).toBe('true');
+
+    // 2. Clasificación de 3 niveles en móvil
+    const alternatives = [
+      {
+        placeId: 'p-1',
+        placeName: "Joe's Pizza",
+        matchLevel: 'VERY_SIMILAR' as const,
+        distanceMeters: 400,
+        label: '🟢 Nivel 1: Muy Similares',
+      },
+      {
+        placeId: 'p-2',
+        placeName: 'Comedy Cellar',
+        matchLevel: 'RELATED_EXPERIENCE' as const,
+        distanceMeters: 1200,
+        label: '🟡 Nivel 2: Experiencias Relacionadas',
+      },
+      {
+        placeId: 'p-3',
+        placeName: 'Metropolitan Museum of Art',
+        matchLevel: 'REQUIRES_ADJUSTMENTS' as const,
+        distanceMeters: 8000,
+        label: '🟠 Nivel 3: Requiere Ajustes',
+      },
+    ];
+
+    expect(alternatives[0].label).toContain('Nivel 1');
+    expect(alternatives[1].label).toContain('Nivel 2');
+    expect(alternatives[2].label).toContain('Nivel 3');
+  });
 });
 

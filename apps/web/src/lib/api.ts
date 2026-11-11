@@ -9,11 +9,15 @@ export const MAP_STYLE_URL =
   'https://tiles.openfreemap.org/styles/liberty';
 
 export function createApiClient(
-  getToken: () => string | null
+  getToken: () => string | null,
+  options?: { isInternal?: boolean }
 ): ExploroApiClient {
   return new ExploroApiClient({
     baseUrl: API_BASE_URL,
     getAccessToken: getToken,
+    defaultHeaders: options?.isInternal
+      ? { 'x-exploro-internal': 'true' }
+      : undefined,
   });
 }
 

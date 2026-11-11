@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -18,6 +18,7 @@ import {
   getInitialModeDescriptors,
 } from '@exploro/business-rules';
 import {
+  ActivityAlternativeOptionDTO,
   ActivityLogDTO,
   AutocompleteSuggestion,
   BudgetTier,
@@ -30,6 +31,9 @@ import {
   PlaceSortBy,
   RouteSummary,
   SurpriseSuggestionDTO,
+  TripDTO,
+  TripItemDTO,
+  TripReorganizationImpactDTO,
   UserReviewDTO,
 } from '@exploro/shared-types';
 import { formatDistanceUS, US_CITIES } from './src/format';
@@ -47,13 +51,32 @@ export default function App(): React.JSX.Element {
   const [localNotice, setLocalNotice] = useState<string | null>(null);
 
   // Navegación principal y vistas
-  const [activeTab, setActiveTab] = useState<'explore' | 'favorites'>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'favorites' | 'trips'>('explore');
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string>('');
   const [selectedCitySlug, setSelectedCitySlug] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<PlaceSortBy>('recommended');
   const [unbounded, setUnbounded] = useState<boolean>(true);
+
+  // Fase 6: Planificador de Viajes (Oculto bajo Feature Flag)
+  const [internalOverride, setInternalOverride] = useState<boolean>(true);
+  const [trips, setTrips] = useState<TripDTO[]>([]);
+  const [selectedTrip, setSelectedTrip] = useState<TripDTO | null>(null);
+  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(1);
+  const [tripsLoading, setTripsLoading] = useState<boolean>(false);
+  const [tripsError, setTripsError] = useState<string | null>(null);
+  const [altsItem, setAltsItem] = useState<TripItemDTO | null>(null);
+  const [altsData, setAltsData] = useState<{
+    verySimilar: ActivityAlternativeOptionDTO[];
+    relatedExperiences: ActivityAlternativeOptionDTO[];
+    requiresAdjustments: ActivityAlternativeOptionDTO[];
+  } | null>(null);
+  const [altsLoading, setAltsLoading] = useState<boolean>(false);
+  const [modifyingItem, setModifyingItem] = useState<TripItemDTO | null>(null);
+  const [newStartTime, setNewStartTime] = useState<string>('11:00');
+  const [newDuration, setNewDuration] = useState<number>(60);
+  const [reorgPreview, setReorgPreview] = useState<TripReorganizationImpactDTO | null>(null);
 
   // Autocomplete
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<
@@ -375,6 +398,123 @@ export default function App(): React.JSX.Element {
     return places;
   }, [places, favoriteIds, activeTab]);
 
+  const tripClient = useMemo(
+    () =>
+      new ExploroApiClient({
+        baseUrl: API_URL,
+        defaultHeaders: internalOverride
+          ? { 'x-exploro-internal': 'true' }
+          : undefined,
+      }),
+    [internalOverride]
+  );
+
+  const handleLoadTripsMobile = useCallback(async () => {
+    setTripsLoading(true);
+    setTripsError(null);
+    try {
+      const list = await tripClient.listTrips();
+      setTrips(list);
+      if (list.length > 0 && !selectedTrip) {
+        setSelectedTrip(list[0]);
+      }
+    } catch (err: unknown) {
+      setTripsError(
+        err instanceof Error ? err.message : 'Error al cargar viajes'
+      );
+    } finally {
+      setTripsLoading(false);
+    }
+  }, [tripClient, selectedTrip]);
+
+  const handleGenerateAssistedMobile = async () => {
+    setTripsLoading(true);
+    setTripsError(null);
+    try {
+      const plan = await tripClient.generateAssistedPlan({
+        citySlug: 'new-york',
+        title: 'Nueva York en 1 Día (Asistido)',
+        startDate: '2026-11-20',
+        endDate: '2026-11-20',
+        budgetTier: 'MEDIUM',
+        travelStyles: ['CULTURAL'],
+        flexibilityMinutes: 15,
+      });
+      setSelectedTrip(plan);
+      setTrips((prev) => [plan, ...prev]);
+    } catch (err: unknown) {
+      setTripsError(
+        err instanceof Error ? err.message : 'Error al generar itinerario'
+      );
+    } finally {
+      setTripsLoading(false);
+    }
+  };
+
+  const handleOpenAlternativesMobile = async (item: TripItemDTO) => {
+    if (!selectedTrip) return;
+    setAltsItem(item);
+    setAltsLoading(true);
+    setAltsData(null);
+    try {
+      const res = await tripClient.getActivityAlternatives(
+        selectedTrip.id,
+        item.id,
+        15
+      );
+      setAltsData(res);
+    } catch (err: unknown) {
+      setTripsError(
+        err instanceof Error ? err.message : 'Error al obtener alternativas'
+      );
+    } finally {
+      setAltsLoading(false);
+    }
+  };
+
+  const handlePreviewReorgMobile = async () => {
+    if (!selectedTrip || !modifyingItem) return;
+    try {
+      const preview = await tripClient.previewReorganization(
+        selectedTrip.id,
+        modifyingItem.id,
+        {
+          newStartTime,
+          newDurationMinutes: newDuration,
+        }
+      );
+      setReorgPreview(preview);
+    } catch (err: unknown) {
+      setTripsError(
+        err instanceof Error ? err.message : 'Error al previsualizar cambios'
+      );
+    }
+  };
+
+  const handleApplyReorgMobile = async () => {
+    if (!selectedTrip || !modifyingItem || !reorgPreview) return;
+    try {
+      await tripClient.updateTripItem(selectedTrip.id, modifyingItem.id, {
+        startTime: newStartTime,
+        durationMinutes: newDuration,
+      });
+      if (reorgPreview.shiftedItems.length > 0) {
+        await tripClient.applyReorganization(selectedTrip.id, {
+          affectedItemIds: reorgPreview.shiftedItems.map((s) => s.itemId),
+          shiftMinutes: reorgPreview.shiftedItems[0].shiftMinutes,
+        });
+      }
+      const updated = await tripClient.getTripById(selectedTrip.id);
+      setSelectedTrip(updated);
+      setModifyingItem(null);
+      setReorgPreview(null);
+    } catch (err: unknown) {
+      setTripsError(
+        err instanceof Error ? err.message : 'Error al aplicar reorganización'
+      );
+    }
+  };
+
   // Pantalla 1: Selección obligatoria de Modo de Exploración
   if (selectedMode === null) {
     return (
@@ -436,7 +576,7 @@ export default function App(): React.JSX.Element {
           </Pressable>
         </View>
 
-        {/* Pestañas: Catálogo vs Favoritos + Botón Sorpréndeme */}
+        {/* Pestañas: Catálogo vs Favoritos vs Viajes + Botón Sorpréndeme */}
         <View style={styles.tabBar}>
           <Pressable
             onPress={() => setActiveTab('explore')}
@@ -448,7 +588,7 @@ export default function App(): React.JSX.Element {
                 activeTab === 'explore' && styles.tabItemTextActive,
               ]}
             >
-              Explorar ({places.length})
+              Explorar
             </Text>
           </Pressable>
           <Pressable
@@ -462,6 +602,22 @@ export default function App(): React.JSX.Element {
               ]}
             >
               Favoritos ({favoriteIds.size})
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setActiveTab('trips');
+              void handleLoadTripsMobile();
+            }}
+            style={[styles.tabItem, activeTab === 'trips' && styles.tabItemActive]}
+          >
+            <Text
+              style={[
+                styles.tabItemText,
+                activeTab === 'trips' && styles.tabItemTextActive,
+              ]}
+            >
+              🗺️ Viajes
             </Text>
           </Pressable>
           <Pressable
@@ -620,93 +776,283 @@ export default function App(): React.JSX.Element {
           </View>
         ) : null}
 
-        {/* Lista de lugares */}
-        <Text style={styles.sectionTitle}>
-          {activeTab === 'explore'
-            ? 'Recomendaciones respaldadas por evidencias'
-            : 'Mis lugares guardados'}
-        </Text>
-
-        {loading ? (
-          <ActivityIndicator size="large" color="#38bdf8" style={{ marginVertical: 32 }} />
-        ) : displayedPlaces.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyTitle}>
-              {activeTab === 'explore'
-                ? 'No se encontraron lugares con estos filtros.'
-                : 'Aún no has guardado ningún lugar favorito.'}
-            </Text>
-            <Text style={styles.emptySub}>
-              {activeTab === 'explore'
-                ? 'Prueba cambiando la ciudad o limpiando la búsqueda.'
-                : 'Toca el ícono de corazón en cualquier tarjeta para guardarlo.'}
-            </Text>
-          </View>
-        ) : (
-          displayedPlaces.map((place) => {
-            const isFav = favoriteIds.has(place.id);
-            const distFormatted = formatDistanceUS(place.distanceMeters);
-
-            return (
+        {/* Lista de lugares o Vista de Viajes */}
+        {activeTab === 'trips' ? (
+          <View style={{ marginTop: 12 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12,
+              }}
+            >
+              <Text style={[styles.badge, { backgroundColor: '#0284c7' }]}>
+                🧪 Modo Interno Activo
+              </Text>
               <Pressable
-                key={place.id}
-                onPress={() => void handleOpenDetail(place.slug || place.id)}
-                style={styles.placeCard}
+                onPress={() => setInternalOverride((v) => !v)}
+                style={[
+                  styles.switchBtn,
+                  { borderColor: internalOverride ? '#10b981' : '#ef4444' },
+                ]}
               >
-                <View style={styles.placeHeader}>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.badgeRow}>
-                      <Text style={styles.placeMeta}>
-                        {place.categoryName} • {place.cityName}
-                        {place.stateCode ? `, ${place.stateCode}` : ''}
-                      </Text>
-                      {place.isDemoData ? (
-                        <View style={styles.demoBadge}>
-                          <Text style={styles.demoBadgeText}>DEMO</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text style={styles.placeName}>{place.name}</Text>
-                  </View>
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(place.id);
-                    }}
-                    style={[styles.favBtn, isFav && styles.favBtnActive]}
-                  >
-                    <Text style={styles.favBtnText}>{isFav ? '❤️' : '🤍'}</Text>
-                  </Pressable>
-                </View>
-
-                <Text style={styles.placeReason} numberOfLines={3}>
-                  {place.recommendationReason}
+                <Text
+                  style={{
+                    color: internalOverride ? '#10b981' : '#ef4444',
+                    fontSize: 11,
+                  }}
+                >
+                  {internalOverride ? 'x-exploro-internal: ON' : 'x-exploro-internal: OFF'}
                 </Text>
+              </Pressable>
+            </View>
 
-                <View style={styles.placeFooter}>
-                  <View>
-                    <Text style={styles.placePrice}>
-                      {formatVerifiedPriceRange({
-                        avgPriceMin: place.avgPriceMin,
-                        avgPriceMax: place.avgPriceMax,
-                        currencyCode: place.currencyCode,
-                        priceStatus: place.priceStatus,
-                      })}
-                      {place.priceStatus !== 'CONFIRMED' ? (
-                        <Text style={styles.unverifiedNote}> (sin verificar)</Text>
-                      ) : null}
-                    </Text>
-                    {distFormatted ? (
-                      <Text style={styles.placeDistance}>📍 {distFormatted}</Text>
-                    ) : null}
-                  </View>
-                  <Text style={styles.placeEvidenceCount}>
-                    {place.recommendationCount} evidencia(s)
+            <Pressable
+              onPress={handleGenerateAssistedMobile}
+              style={[
+                styles.surpriseButton,
+                { marginBottom: 16, alignItems: 'center' },
+              ]}
+            >
+              <Text style={styles.surpriseButtonText}>
+                ✨ Generar Itinerario Asistido (NY)
+              </Text>
+            </Pressable>
+
+            {tripsLoading ? (
+              <ActivityIndicator
+                size="large"
+                color="#38bdf8"
+                style={{ marginVertical: 32 }}
+              />
+            ) : tripsError ? (
+              <View style={styles.noticeBox}>
+                <Text style={styles.noticeText}>{tripsError}</Text>
+              </View>
+            ) : selectedTrip ? (
+              <View>
+                <Text style={styles.sectionTitle}>
+                  Mis Itinerarios ({trips.length})
+                </Text>
+                <View style={[styles.placeCard, { marginBottom: 16 }]}>
+                  <Text style={styles.placeName}>{selectedTrip.title}</Text>
+                  <Text style={styles.placeMeta}>
+                    📅 {selectedTrip.startDate} • 💰 Presupuesto:{' '}
+                    {selectedTrip.budgetTier} • ⏱️ Flexibilidad: ±
+                    {selectedTrip.flexibilityMinutes}m
                   </Text>
                 </View>
-              </Pressable>
-            );
-          })
+
+                {/* Días */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  {selectedTrip.days?.map((d) => (
+                    <Pressable
+                      key={d.id}
+                      onPress={() => setSelectedDayNumber(d.dayNumber)}
+                      style={[
+                        styles.categoryChip,
+                        selectedDayNumber === d.dayNumber && styles.categoryChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          selectedDayNumber === d.dayNumber && styles.chipTextActive,
+                        ]}
+                      >
+                        Día {d.dayNumber}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Items del día */}
+                {selectedTrip.days
+                  ?.find((d) => d.dayNumber === selectedDayNumber)
+                  ?.items?.map((it, idx) => (
+                    <View
+                      key={it.id}
+                      style={[styles.placeCard, { padding: 12, marginBottom: 10 }]}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}
+                        >
+                          <View
+                            style={{
+                              backgroundColor: '#0f172a',
+                              padding: 6,
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: '#38bdf8',
+                                fontWeight: '700',
+                                fontSize: 13,
+                              }}
+                            >
+                              {it.startTime ?? '10:00'}
+                            </Text>
+                          </View>
+                          <View>
+                            <Text
+                              style={{
+                                color: '#f8fafc',
+                                fontWeight: '700',
+                                fontSize: 14,
+                              }}
+                            >
+                              {it.customTitle ?? it.placeName ?? 'Actividad'}
+                            </Text>
+                            <Text style={{ color: '#94a3b8', fontSize: 12 }}>
+                              {it.durationMinutes} min{' '}
+                              {idx > 0 && it.transitDistanceMetersFromPrev > 0
+                                ? `• Traslado: ${(
+                                    it.transitDistanceMetersFromPrev / 1000
+                                  ).toFixed(1)} km (~${it.transitMinutesFromPrev}m)`
+                                : ''}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                        <Pressable
+                          onPress={() => void handleOpenAlternativesMobile(it)}
+                          style={[styles.switchBtn, { backgroundColor: '#1e293b' }]}
+                        >
+                          <Text style={{ color: '#38bdf8', fontSize: 11 }}>
+                            🔄 Alternativas (3 Niveles)
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => {
+                            setModifyingItem(it);
+                            setNewStartTime(it.startTime?.slice(0, 5) ?? '10:00');
+                            setNewDuration(it.durationMinutes);
+                            setReorgPreview(null);
+                          }}
+                          style={[styles.switchBtn, { backgroundColor: '#1e293b' }]}
+                        >
+                          <Text style={{ color: '#cbd5e1', fontSize: 11 }}>
+                            ⏱️ Ajustar Horario
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+              </View>
+            ) : (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyTitle}>No hay itinerarios registrados</Text>
+                <Text style={styles.emptySub}>
+                  Genera uno asistido para comenzar.
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <>
+            <Text style={styles.sectionTitle}>
+              {activeTab === 'explore'
+                ? 'Recomendaciones respaldadas por evidencias'
+                : 'Mis lugares guardados'}
+            </Text>
+
+            {loading ? (
+              <ActivityIndicator size="large" color="#38bdf8" style={{ marginVertical: 32 }} />
+            ) : displayedPlaces.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyTitle}>
+                  {activeTab === 'explore'
+                    ? 'No se encontraron lugares con estos filtros.'
+                    : 'Aún no has guardado ningún lugar favorito.'}
+                </Text>
+                <Text style={styles.emptySub}>
+                  {activeTab === 'explore'
+                    ? 'Prueba cambiando la ciudad o limpiando la búsqueda.'
+                    : 'Toca el ícono de corazón en cualquier tarjeta para guardarlo.'}
+                </Text>
+              </View>
+            ) : (
+              displayedPlaces.map((place) => {
+                const isFav = favoriteIds.has(place.id);
+                const distFormatted = formatDistanceUS(place.distanceMeters);
+
+                return (
+                  <Pressable
+                    key={place.id}
+                    onPress={() => void handleOpenDetail(place.slug || place.id)}
+                    style={styles.placeCard}
+                  >
+                    <View style={styles.placeHeader}>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.badgeRow}>
+                          <Text style={styles.placeMeta}>
+                            {place.categoryName} • {place.cityName}
+                            {place.stateCode ? `, ${place.stateCode}` : ''}
+                          </Text>
+                          {place.isDemoData ? (
+                            <View style={styles.demoBadge}>
+                              <Text style={styles.demoBadgeText}>DEMO</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={styles.placeName}>{place.name}</Text>
+                      </View>
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(place.id);
+                        }}
+                        style={[styles.favBtn, isFav && styles.favBtnActive]}
+                      >
+                        <Text style={styles.favBtnText}>{isFav ? '❤️' : '🤍'}</Text>
+                      </Pressable>
+                    </View>
+
+                    <Text style={styles.placeReason} numberOfLines={3}>
+                      {place.recommendationReason}
+                    </Text>
+
+                    <View style={styles.placeFooter}>
+                      <View>
+                        <Text style={styles.placePrice}>
+                          {formatVerifiedPriceRange({
+                            avgPriceMin: place.avgPriceMin,
+                            avgPriceMax: place.avgPriceMax,
+                            currencyCode: place.currencyCode,
+                            priceStatus: place.priceStatus,
+                          })}
+                          {place.priceStatus !== 'CONFIRMED' ? (
+                            <Text style={styles.unverifiedNote}> (sin verificar)</Text>
+                          ) : null}
+                        </Text>
+                        {distFormatted ? (
+                          <Text style={styles.placeDistance}>📍 {distFormatted}</Text>
+                        ) : null}
+                      </View>
+                      <Text style={styles.placeEvidenceCount}>
+                        {place.recommendationCount} evidencia(s)
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -894,6 +1240,220 @@ export default function App(): React.JSX.Element {
                 </View>
               </View>
             ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* MODAL: Alternativas en 3 Niveles (Fase 6) */}
+      <Modal
+        visible={altsItem !== null}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setAltsItem(null)}
+      >
+        <SafeAreaView style={styles.container}>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.topBar}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerTitle}>🔄 Alternativas</Text>
+                <Text style={styles.headerSub}>
+                  Para: {altsItem?.customTitle ?? altsItem?.placeName ?? 'Actividad'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setAltsItem(null)}
+                style={styles.switchBtn}
+              >
+                <Text style={styles.switchBtnText}>Cerrar</Text>
+              </Pressable>
+            </View>
+
+            {altsLoading ? (
+              <ActivityIndicator
+                size="large"
+                color="#38bdf8"
+                style={{ marginVertical: 32 }}
+              />
+            ) : altsData ? (
+              <View style={{ gap: 16 }}>
+                {/* Nivel 1 */}
+                <View>
+                  <Text style={[styles.sectionTitle, { color: '#10b981' }]}>
+                    🟢 Nivel 1: Muy Similares ({altsData.verySimilar.length})
+                  </Text>
+                  <Text style={[styles.placeMeta, { marginBottom: 8 }]}>
+                    Misma categoría, cercanía geográfica (&lt; 2.5 km) y duración equivalente.
+                  </Text>
+                  {altsData.verySimilar.map((alt) => (
+                    <View
+                      key={alt.placeId}
+                      style={[
+                        styles.placeCard,
+                        { borderColor: '#10b981', borderWidth: 1, padding: 12, marginBottom: 8 },
+                      ]}
+                    >
+                      <Text style={styles.placeName}>{alt.placeName}</Text>
+                      <Text style={styles.placeMeta}>
+                        📍 {(alt.distanceMetersFromOriginal / 1000).toFixed(1)} km • ⏱️ {alt.estimatedDurationMins}m • 💰 ${alt.estimatedCost}
+                      </Text>
+                      <Text style={[styles.placeReason, { color: '#10b981', marginTop: 4 }]}>
+                        {alt.explanation}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Nivel 2 */}
+                <View>
+                  <Text style={[styles.sectionTitle, { color: '#f59e0b' }]}>
+                    🟡 Nivel 2: Experiencias Relacionadas ({altsData.relatedExperiences.length})
+                  </Text>
+                  <Text style={[styles.placeMeta, { marginBottom: 8 }]}>
+                    Experiencias complementarias en la misma zona (&lt; 6 km).
+                  </Text>
+                  {altsData.relatedExperiences.map((alt) => (
+                    <View
+                      key={alt.placeId}
+                      style={[
+                        styles.placeCard,
+                        { borderColor: '#f59e0b', borderWidth: 1, padding: 12, marginBottom: 8 },
+                      ]}
+                    >
+                      <Text style={styles.placeName}>{alt.placeName}</Text>
+                      <Text style={styles.placeMeta}>
+                        📍 {(alt.distanceMetersFromOriginal / 1000).toFixed(1)} km • ⏱️ {alt.estimatedDurationMins}m
+                      </Text>
+                      <Text style={[styles.placeReason, { color: '#f59e0b', marginTop: 4 }]}>
+                        {alt.explanation}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Nivel 3 */}
+                <View>
+                  <Text style={[styles.sectionTitle, { color: '#f97316' }]}>
+                    🟠 Nivel 3: Requiere Ajustes ({altsData.requiresAdjustments.length})
+                  </Text>
+                  <Text style={[styles.placeMeta, { marginBottom: 8 }]}>
+                    Opciones que implican mayor tiempo de viaje o reprogramación.
+                  </Text>
+                  {altsData.requiresAdjustments.slice(0, 3).map((alt) => (
+                    <View
+                      key={alt.placeId}
+                      style={[
+                        styles.placeCard,
+                        { borderColor: '#f97316', borderWidth: 1, padding: 12, marginBottom: 8 },
+                      ]}
+                    >
+                      <Text style={styles.placeName}>{alt.placeName}</Text>
+                      <Text style={styles.placeMeta}>
+                        📍 {(alt.distanceMetersFromOriginal / 1000).toFixed(1)} km
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* MODAL: Ajustar Horario y Reorganización Inteligente (Fase 6) */}
+      <Modal
+        visible={modifyingItem !== null}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setModifyingItem(null)}
+      >
+        <SafeAreaView style={styles.container}>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.topBar}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerTitle}>⏱️ Ajustar Horario</Text>
+                <Text style={styles.headerSub}>
+                  {modifyingItem?.customTitle ?? modifyingItem?.placeName}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setModifyingItem(null)}
+                style={styles.switchBtn}
+              >
+                <Text style={styles.switchBtnText}>Cancelar</Text>
+              </Pressable>
+            </View>
+
+            <View style={[styles.placeCard, { padding: 16, gap: 12 }]}>
+              <Text style={{ color: '#cbd5e1', fontSize: 13 }}>Nueva Hora de Inicio (HH:MM):</Text>
+              <TextInput
+                value={newStartTime}
+                onChangeText={setNewStartTime}
+                style={[styles.searchInput, { paddingHorizontal: 12 }]}
+                placeholder="11:00"
+                placeholderTextColor="#64748b"
+              />
+
+              <Text style={{ color: '#cbd5e1', fontSize: 13 }}>Duración (minutos):</Text>
+              <TextInput
+                value={String(newDuration)}
+                onChangeText={(v) => setNewDuration(Number(v) || 60)}
+                keyboardType="numeric"
+                style={[styles.searchInput, { paddingHorizontal: 12 }]}
+                placeholder="60"
+                placeholderTextColor="#64748b"
+              />
+
+              <Pressable
+                onPress={handlePreviewReorgMobile}
+                style={[styles.surpriseButton, { alignItems: 'center', marginTop: 8 }]}
+              >
+                <Text style={styles.surpriseButtonText}>
+                  🔍 Calcular Impacto en Actividades Posteriores
+                </Text>
+              </Pressable>
+
+              {reorgPreview && (
+                <View
+                  style={{
+                    backgroundColor: '#0f172a',
+                    padding: 12,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: reorgPreview.scheduleOverflowsDay ? '#ef4444' : '#38bdf8',
+                    marginTop: 8,
+                    gap: 6,
+                  }}
+                >
+                  <Text style={{ color: '#f8fafc', fontWeight: '700', fontSize: 13 }}>
+                    {reorgPreview.requiresApproval
+                      ? '⚠️ Impacto detectado en el itinerario'
+                      : '✅ Horarios compatibles'}
+                  </Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 12 }}>
+                    {reorgPreview.reason}
+                  </Text>
+                  {reorgPreview.scheduleOverflowsDay && (
+                    <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>
+                      {reorgPreview.recommendationMessage}
+                    </Text>
+                  )}
+                  {reorgPreview.shiftedItems.map((sh) => (
+                    <Text key={sh.itemId} style={{ color: '#38bdf8', fontSize: 12 }}>
+                      • {sh.placeName}: {sh.originalStartTime} ➔ {sh.proposedStartTime} (+{sh.shiftMinutes}m)
+                    </Text>
+                  ))}
+
+                  <Pressable
+                    onPress={handleApplyReorgMobile}
+                    style={[styles.surpriseButton, { backgroundColor: '#10b981', marginTop: 12, alignItems: 'center' }]}
+                  >
+                    <Text style={styles.surpriseButtonText}>
+                      ✅ Confirmar y Aplicar Cambios
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>

@@ -315,6 +315,111 @@ export const completeActivityReviewSchema = z.object({
   wouldReturnOrRecommend: z.boolean().default(true),
 });
 
+// FASE 6: Esquemas del Planificador de Viajes (Oculto)
+export const tripStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'COMPLETED', 'ARCHIVED']);
+export const tripItemStatusSchema = z.enum(['PLANNED', 'COMPLETED', 'SKIPPED']);
+export const flexibilityMinutesSchema = z.union([
+  z.literal(0),
+  z.literal(15),
+  z.literal(30),
+  z.literal(60),
+]);
+export const alternativeMatchLevelSchema = z.enum([
+  'VERY_SIMILAR',
+  'RELATED_EXPERIENCE',
+  'REQUIRES_ADJUSTMENTS',
+]);
+
+export const createTripSchema = z
+  .object({
+    destinationId: z.string().uuid().optional(),
+    citySlug: z.string().trim().min(1).optional(),
+    title: z
+      .string()
+      .trim()
+      .min(3, 'El título del viaje debe tener al menos 3 caracteres')
+      .max(200),
+    description: z.string().trim().max(1000).optional(),
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
+    budgetTier: budgetTierSchema.default('MEDIUM'),
+    travelStyles: z.array(travelStyleSchema).default([]),
+    flexibilityMinutes: flexibilityMinutesSchema.default(15),
+  })
+  .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
+    message: 'La fecha de fin debe ser posterior o igual a la fecha de inicio',
+  });
+
+export const updateTripSchema = z.object({
+  title: z.string().trim().min(3).max(200).optional(),
+  description: z.string().trim().max(1000).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  budgetTier: budgetTierSchema.optional(),
+  travelStyles: z.array(travelStyleSchema).optional(),
+  flexibilityMinutes: flexibilityMinutesSchema.optional(),
+  status: tripStatusSchema.optional(),
+});
+
+export const createTripItemSchema = z.object({
+  placeId: z.string().uuid('Identificador de lugar inválido'),
+  activityId: z.string().uuid().optional(),
+  customTitle: z.string().trim().max(180).optional(),
+  startTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Hora inválida (HH:MM)')
+    .optional(),
+  durationMinutes: z.number().int().min(15).max(720).default(60),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export const updateTripItemSchema = z.object({
+  customTitle: z.string().trim().max(180).optional(),
+  startTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Hora inválida (HH:MM)')
+    .optional(),
+  durationMinutes: z.number().int().min(15).max(720).optional(),
+  notes: z.string().trim().max(500).optional(),
+  status: tripItemStatusSchema.optional(),
+});
+
+export const reorderTripItemsSchema = z.object({
+  itemIdsInOrder: z.array(z.string().uuid()).min(1),
+});
+
+export const assistedPlanRequestSchema = z
+  .object({
+    citySlug: z.string().trim().min(1, 'La ciudad de destino es obligatoria'),
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
+    budgetTier: budgetTierSchema.default('MEDIUM'),
+    travelStyles: z.array(travelStyleSchema).min(1, 'Selecciona al menos un estilo de viaje'),
+    flexibilityMinutes: flexibilityMinutesSchema.default(15),
+    title: z.string().trim().max(200).optional(),
+  })
+  .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
+    message: 'La fecha de fin debe ser posterior o igual a la fecha de inicio',
+  });
+
+export const getAlternativesQuerySchema = z.object({
+  flexibilityMinutes: z.coerce.number().int().optional(),
+  maxDistanceMeters: z.coerce.number().int().min(500).max(50000).default(10000),
+});
+
+export const applyReorganizationSchema = z.object({
+  shiftMinutes: z.number().int(),
+  affectedItemIds: z.array(z.string().uuid()),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
@@ -340,6 +445,15 @@ export type VerifyVisitInput = z.infer<typeof verifyVisitSchema>;
 export type RestaurantReviewInput = z.infer<typeof restaurantReviewSchema>;
 export type TourismReviewInput = z.infer<typeof tourismReviewSchema>;
 export type CompleteActivityReviewInput = z.infer<typeof completeActivityReviewSchema>;
+export type CreateTripInput = z.infer<typeof createTripSchema>;
+export type UpdateTripInput = z.infer<typeof updateTripSchema>;
+export type CreateTripItemInput = z.infer<typeof createTripItemSchema>;
+export type UpdateTripItemInput = z.infer<typeof updateTripItemSchema>;
+export type ReorderTripItemsInput = z.infer<typeof reorderTripItemsSchema>;
+export type AssistedPlanRequestInput = z.infer<typeof assistedPlanRequestSchema>;
+export type GetAlternativesQueryInput = z.infer<typeof getAlternativesQuerySchema>;
+export type ApplyReorganizationInput = z.infer<typeof applyReorganizationSchema>;
+
 
 
 

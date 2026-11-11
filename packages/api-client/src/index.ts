@@ -1,4 +1,5 @@
 import {
+  ActivityAlternativeOptionDTO,
   ActivityLogDTO,
   AiFinOpsMetrics,
   ApiResponse,
@@ -22,24 +23,34 @@ import {
   SourceDTO,
   SourceSyncResult,
   SurpriseMeResponse,
+  TripDTO,
+  TripItemDTO,
+  TripReorganizationImpactDTO,
   UserProfile,
   UserReviewDTO,
   VerifyVisitResponse,
 } from '@exploro/shared-types';
 import {
+  ApplyReorganizationInput,
+  AssistedPlanRequestInput,
   CompleteActivityReviewInput,
   CreateCollectionInput,
   CreateEvidenceInput,
   CreateSourceInput,
+  CreateTripInput,
+  CreateTripItemInput,
   DetectDuplicatesQueryInput,
   DiscoverPlacesQueryInput,
   GeoAutocompleteQueryInput,
   GeoRouteInput,
   LoginInput,
   RegisterInput,
+  ReorderTripItemsInput,
   StartActivityInput,
   SurpriseMeRequestInput,
   UpdatePreferencesInput,
+  UpdateTripInput,
+  UpdateTripItemInput,
   VerifyVisitInput,
 } from '@exploro/validation';
 
@@ -47,6 +58,7 @@ export interface ExploroApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | null | Promise<string | null>;
   fetchImpl?: typeof fetch;
+  defaultHeaders?: Record<string, string>;
 }
 
 export class ExploroApiError extends Error {
@@ -65,11 +77,13 @@ export class ExploroApiClient {
   private readonly baseUrl: string;
   private readonly getAccessToken?: () => string | null | Promise<string | null>;
   private readonly fetchImpl: typeof fetch;
+  private readonly defaultHeaders?: Record<string, string>;
 
   constructor(options: ExploroApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.getAccessToken = options.getAccessToken;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.defaultHeaders = options.defaultHeaders;
   }
 
   private async request<T>(
@@ -78,6 +92,7 @@ export class ExploroApiClient {
   ): Promise<ApiResponse<T>> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
+      ...(this.defaultHeaders ?? {}),
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...((init.headers as Record<string, string>) ?? {}),
     };
@@ -443,6 +458,168 @@ export class ExploroApiClient {
   ): Promise<UserReviewDTO[]> {
     const res = await this.request<UserReviewDTO[]>(
       `/places/${encodeURIComponent(placeId)}/reviews?limit=${limit}`
+    );
+    return res.data;
+  }
+
+  // -------------------------------------------------------------------------
+  // FASE 6: Planificador de Viajes (Oculto bajo Feature Flag)
+  // -------------------------------------------------------------------------
+
+  public async createTrip(data: CreateTripInput): Promise<TripDTO> {
+    const res = await this.request<TripDTO>('/trips', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+  }
+
+  public async listTrips(): Promise<TripDTO[]> {
+    const res = await this.request<TripDTO[]>('/trips');
+    return res.data;
+  }
+
+  public async getTripById(id: string): Promise<TripDTO> {
+    const res = await this.request<TripDTO>(`/trips/${encodeURIComponent(id)}`);
+    return res.data;
+  }
+
+  public async updateTrip(
+    id: string,
+    data: UpdateTripInput
+  ): Promise<TripDTO> {
+    const res = await this.request<TripDTO>(`/trips/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+  }
+
+  public async deleteTrip(
+    id: string
+  ): Promise<{ success: boolean; id: string }> {
+    const res = await this.request<{ success: boolean; id: string }>(
+      `/trips/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+    return res.data;
+  }
+
+  public async createTripItem(
+    tripId: string,
+    dayId: string,
+    data: CreateTripItemInput
+  ): Promise<TripItemDTO> {
+    const res = await this.request<TripItemDTO>(
+      `/trips/${encodeURIComponent(tripId)}/days/${encodeURIComponent(dayId)}/items`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async updateTripItem(
+    tripId: string,
+    itemId: string,
+    data: UpdateTripItemInput
+  ): Promise<TripItemDTO> {
+    const res = await this.request<TripItemDTO>(
+      `/trips/${encodeURIComponent(tripId)}/items/${encodeURIComponent(itemId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async deleteTripItem(
+    tripId: string,
+    itemId: string
+  ): Promise<{ success: boolean; id: string }> {
+    const res = await this.request<{ success: boolean; id: string }>(
+      `/trips/${encodeURIComponent(tripId)}/items/${encodeURIComponent(itemId)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+    return res.data;
+  }
+
+  public async reorderTripItems(
+    tripId: string,
+    dayId: string,
+    data: ReorderTripItemsInput
+  ): Promise<TripItemDTO[]> {
+    const res = await this.request<TripItemDTO[]>(
+      `/trips/${encodeURIComponent(tripId)}/days/${encodeURIComponent(dayId)}/reorder`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async generateAssistedPlan(
+    data: AssistedPlanRequestInput
+  ): Promise<TripDTO> {
+    const res = await this.request<TripDTO>('/trips/assisted-plan', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+  }
+
+  public async getActivityAlternatives(
+    tripId: string,
+    itemId: string,
+    flexibilityMinutes?: number
+  ): Promise<{
+    verySimilar: ActivityAlternativeOptionDTO[];
+    relatedExperiences: ActivityAlternativeOptionDTO[];
+    requiresAdjustments: ActivityAlternativeOptionDTO[];
+  }> {
+    const qs = flexibilityMinutes !== undefined ? `?flexibilityMinutes=${flexibilityMinutes}` : '';
+    const res = await this.request<{
+      verySimilar: ActivityAlternativeOptionDTO[];
+      relatedExperiences: ActivityAlternativeOptionDTO[];
+      requiresAdjustments: ActivityAlternativeOptionDTO[];
+    }>(
+      `/trips/${encodeURIComponent(tripId)}/items/${encodeURIComponent(itemId)}/alternatives${qs}`
+    );
+    return res.data;
+  }
+
+  public async previewReorganization(
+    tripId: string,
+    itemId: string,
+    data: { newStartTime: string; newDurationMinutes: number }
+  ): Promise<TripReorganizationImpactDTO> {
+    const res = await this.request<TripReorganizationImpactDTO>(
+      `/trips/${encodeURIComponent(tripId)}/items/${encodeURIComponent(itemId)}/reorganize-preview`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return res.data;
+  }
+
+  public async applyReorganization(
+    tripId: string,
+    data: ApplyReorganizationInput
+  ): Promise<{ success: boolean; updatedCount: number }> {
+    const res = await this.request<{ success: boolean; updatedCount: number }>(
+      `/trips/${encodeURIComponent(tripId)}/apply-reorganization`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
     );
     return res.data;
   }

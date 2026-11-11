@@ -4,6 +4,36 @@ Todos los cambios importantes en la arquitectura, código, base de datos y docum
 
 ---
 
+## [0.7.0] — 2026-11-11 (Fase 6: Planificador de Viajes — Oculto bajo Feature Flag Completada)
+
+### Agregado
+- **Modelo de Datos y Migración de Base de Datos (`04-phase6-trips.sql`)**:
+  - Tabla `trips`: Metadatos de viaje (`title`, `destination_id`, `city_slug`, `start_date`, `end_date`, `budget_tier`, `travel_styles`, `flexibility_minutes`, `status`).
+  - Tabla `trip_days`: Días secuenciales del viaje (`day_number`, `date`, `title`, `theme`).
+  - Tabla `trip_items`: Actividades cronológicas por día con restricción única `(trip_day_id, order_index)` y cálculo de traslados (`transit_minutes_from_prev`, `transit_distance_meters_from_prev`).
+- **Feature Flag y Seguridad (`TripsFeatureFlagGuard`)**:
+  - Bloqueo público estricto: responde HTTP 403 Forbidden cuando `trip_planner_enabled = false` en `feature_flags`.
+  - Bypass interno para desarrollo y QA mediante cabecera `x-exploro-internal: true` o `x-feature-override: trip-planner`.
+- **Reglas de Negocio para Planificación y Reorganización (`packages/business-rules`)**:
+  - `classifyActivityAlternatives`: Clasificación determinista en 3 niveles (Nivel 1: Muy Similares, Nivel 2: Experiencias Relacionadas, Nivel 3: Requiere Ajustes).
+  - `detectReorganizationImpact`: Detección anticipada del impacto de retrasos o modificaciones de horario en actividades subsecuentes. No realiza mutaciones silenciosas en base de datos.
+  - Alerta de rebase de día (`scheduleOverflowsDay`) si la jornada concluye después de las 23:30.
+- **Módulo de Viajes en Backend NestJS (`apps/api/src/modules/trips/`)**:
+  - Endpoints CRUD: `POST /trips`, `GET /trips`, `GET /trips/:id`, `PATCH /trips/:id`, `DELETE /trips/:id`.
+  - Gestión de actividades: `POST /trips/:id/days/:dayId/items`, `PATCH /trips/:id/items/:itemId`, `DELETE /trips/:id/items/:itemId`, `POST /trips/:id/days/:dayId/reorder`.
+  - `POST /trips/assisted-plan`: Generador de itinerarios balanceados (Mañana, Almuerzo, Tarde, Cena) por proximidad y puntuación determinista.
+  - `GET /trips/:id/items/:itemId/alternatives`: Consulta de alternativas en 3 niveles con distancias y tiempos de traslado.
+  - `POST /trips/:id/items/:itemId/reorganize-preview`: Previsualización explicativa del impacto de reorganización.
+  - `POST /trips/:id/apply-reorganization`: Confirmación y aplicación explícita de desplazamientos horarios aprobados por el usuario.
+  - 10 pruebas de integración en `src/phase6.integration.test.ts` (59 pruebas totales en API).
+- **Clientes Web y Mobile (`apps/web` y `apps/mobile`)**:
+  - Web: Componente `TripPlannerPanel.tsx` con tabs de días, visualización de traslados, modal de 3 niveles de alternativas y previsualización interactiva de reorganización.
+  - Mobile: Pestaña `🗺️ Viajes` en `App.tsx`, conmutador de cabecera interna para testing, modal de alternativas clasificadas en 3 niveles y modal interactivo de reorganización.
+- **Verificación Global y Puerta de Calidad**:
+  - Total global: **133 pruebas automatizadas pasando (100% Green)**, 12/12 typecheck exitosos y 8/8 builds en Turborepo.
+
+---
+
 ## [0.6.0] — 2026-11-11 (Fase 5: Sistema de Experiencias Propias Completada)
 
 ### Agregado

@@ -1,8 +1,8 @@
 # Estado del Proyecto — Exploro
 
 **Última actualización:** 2026-11-11  
-**Fase Actual:** FASE 5 — Sistema de Experiencias Propias (✅ Completada y Verificada al 100%)  
-**Siguiente Fase:** FASE 6 — Planificador de Viajes (Oculto bajo Feature Flag) *(En espera de revisión y aprobación del propietario para iniciar)*
+**Fase Actual:** FASE 6 — Planificador de Viajes — Oculto bajo Feature Flag (✅ Completada y Verificada al 100%)  
+**Siguiente Fase:** FASE 7 — Modo «Soy Local» y Micro-Comunidades *(En espera de validación del propietario para iniciar)*
 
 ---
 
@@ -12,7 +12,7 @@ Todos los servicios contenedorizados están activos y saludables (`Up (healthy)`
 
 | Contenedor / Servicio | Imagen / Tecnología | Puerto Local | Estado |
 | :--- | :--- | :--- | :--- |
-| **`exploro-postgres-postgis`** | PostgreSQL 16 + PostGIS 3.7.0 + `pg_trgm` | `:5432` | ✅ `Up (healthy)` — 20 tablas + esquema de experiencias (`activity_logs`, `user_reviews`) y fuente nativa `EXPLORO_NATIVE` |
+| **`exploro-postgres-postgis`** | PostgreSQL 16 + PostGIS 3.7.0 + `pg_trgm` | `:5432` | ✅ `Up (healthy)` — 23 tablas incluyendo `trips`, `trip_days`, `trip_items` y `feature_flags` (`trip_planner_enabled = false`) |
 | **`exploro-redis`** | Redis 7 Alpine | `:6379` | ✅ `Up (healthy)` — Caché geoespacial, recomendaciones y colas activas |
 | **`exploro-minio-s3`** | MinIO S3-Compatible Object Storage | `:9000` / `:9001` | ✅ `Up (healthy)` — Almacenamiento multimedia `$0` |
 | **`exploro-ai-engine`** | Python 3.12 + FastAPI (en Docker) | `:8000` | ✅ `Up (healthy)` — 8/8 pruebas `pytest` superadas |
@@ -25,38 +25,38 @@ Todos los servicios contenedorizados están activos y saludables (`Up (healthy)`
 | :--- | :--- | :--- | :--- |
 | **`@exploro/config`** | `packages/config` | ✅ OK | N/A |
 | **`@exploro/shared-types`** | `packages/shared-types` | ✅ OK | ✅ Verificado en consumidores |
-| **`@exploro/validation`** | `packages/validation` | ✅ OK | ✅ 16 / 16 pruebas unitarias pasando |
-| **`@exploro/business-rules`** | `packages/business-rules` | ✅ OK | ✅ 24 / 24 pruebas unitarias pasando |
-| **`@exploro/api-client`** | `packages/api-client` | ✅ OK | ✅ 3 / 3 pruebas unitarias pasando |
-| **`@exploro/api`** (Backend NestJS) | `apps/api` | ✅ OK | ✅ 49 / 49 pruebas de integración E2E (PostGIS + Redis + Experiences) pasando |
-| **`@exploro/web`** (Next.js Viajero) | `apps/web` | ✅ OK (`next build` producción) | ✅ 4 / 4 pruebas pasando |
-| **`@exploro/mobile`** (Expo Android/iOS) | `apps/mobile` | ✅ OK (`tsc -p tsconfig.json`) | ✅ 9 / 9 pruebas pasando |
+| **`@exploro/validation`** | `packages/validation` | ✅ OK | ✅ 19 / 19 pruebas unitarias pasando |
+| **`@exploro/business-rules`** | `packages/business-rules` | ✅ OK | ✅ 27 / 27 pruebas unitarias pasando |
+| **`@exploro/api-client`** | `packages/api-client` | ✅ OK | ✅ 4 / 4 pruebas unitarias pasando |
+| **`@exploro/api`** (Backend NestJS) | `apps/api` | ✅ OK | ✅ 59 / 59 pruebas de integración E2E (Fases 1 a 6) pasando |
+| **`@exploro/web`** (Next.js Viajero) | `apps/web` | ✅ OK (`next build` producción — 128 kB First Load JS) | ✅ 4 / 4 pruebas pasando |
+| **`@exploro/mobile`** (Expo Android/iOS) | `apps/mobile` | ✅ OK (`tsc -p tsconfig.json`) | ✅ 10 / 10 pruebas pasando |
 | **`@exploro/admin`** (Gobernanza) | `apps/admin` | ✅ OK | ✅ 2 / 2 pruebas pasando |
 | **`ai-engine`** (FastAPI en Docker) | `services/ai-engine` | ✅ OK | ✅ 8 / 8 pruebas `pytest` pasando |
-| **TOTAL** | **Pipeline Global** | **✅ 23/23 Tareas de Turborepo** | **✅ 115 / 115 Pruebas Pasando (100% Green)** |
+| **TOTAL** | **Pipeline Global** | **✅ 12/12 Tareas de Typecheck & 8/8 Build Exitosas** | **✅ 133 / 133 Pruebas Pasando (100% Green)** |
 
 ---
 
-## 3. Cumplimiento de Criterios de Aceptación de la Fase 5
+## 3. Cumplimiento de Criterios de Aceptación de la Fase 6
 
-- [x] **Flujo «Comenzar actividad» (`apps/api` & `activity_logs`)**:
-  - `POST /experiences/start`: Registra el inicio de actividad con usuario autenticado, lugar, título de actividad, hora de inicio y estado `STARTED` (`verification_method = 'NONE'`, `is_verified_visit = false`).
-  - `GET /experiences/active`: Permite recuperar en tiempo real la actividad en progreso del usuario.
-- [x] **Verificación Opcional de Visita (GPS y Códigos QR)**:
-  - `POST /experiences/:id/verify-visit`:
-    - Comprobación esférica Haversine y PostGIS `ST_DWithin` contra las coordenadas reales del lugar ($\le 100\text{ m}$).
-    - Validación de códigos QR oficiales del lugar (`EXPLORO-QR-<slug>`).
-    - Regla inquebrantable respetada: el simple inicio no prueba la visita física; únicamente tras superar la comprobación de proximidad o QR se actualiza a `is_verified_visit = TRUE`.
-- [x] **Cuestionarios Cortos Adaptados por Categoría (Sin formularios largos)**:
-  - Restaurantes: Calidad y sabor (1-5), atención (1-5), relación calidad-precio, gasto en USD, plato recomendado, si volvería y comentario libre.
-  - Turismo: Si valió la pena, tiempo invertido, accesibilidad, gasto en USD, recomendación y qué debería saber otro visitante.
-- [x] **Integración Inmutable al Ranking Determinista**:
-  - `POST /experiences/:id/complete`: Almacena la opinión en `user_reviews` e ingesta automáticamente una evidencia en `evidences` con `source_code = 'EXPLORO_NATIVE'`.
-  - Bono determinista de confianza en ranking: $1.35\times$ para visitas verificadas (confianza 0.95) y $1.15\times$ para opiniones no verificadas (confianza 0.75).
-  - Recálculo inmediato de `place_scores` incrementando `total_native_reviews`.
+- [x] **Aislamiento Estricto por Feature Flag (Paso 6.1)**:
+  - Bandera en base de datos: `feature_flags.key = 'trip_planner_enabled'` con valor `false`.
+  - Guardia NestJS `TripsFeatureFlagGuard`: bloquea con HTTP 403 Forbidden a usuarios públicos sin cabeceras internas.
+  - Bypass exclusivo para pruebas internas mediante cabecera `x-exploro-internal: true`.
+- [x] **Modelo de Datos y Traslados PostGIS ($0.00)**:
+  - Tablas `trips`, `trip_days` y `trip_items` aplicadas en migración `04-phase6-trips.sql`.
+  - Cálculo de distancias y tiempos entre actividades consecutivas mediante PostGIS `ST_Distance(p1.location, p2.location)` esférico.
+- [x] **Motor de Planificación Asistida Determinista (Paso 6.2 y 6.3)**:
+  - `POST /trips/assisted-plan`: Asignación lógica de actividades para Mañana (Turismo/Naturaleza), Almuerzo (Comida), Tarde (Turismo) y Cena (Comida) basada en puntuaciones verificables y sin alucinaciones.
+- [x] **Clasificación de Alternativas en 3 Niveles (Paso 6.4)**:
+  - Nivel 1 (`VERY_SIMILAR`): Misma categoría, distancia $\le 2.5\text{ km}$, duración similar ($\le 45\text{ min}$).
+  - Nivel 2 (`RELATED_EXPERIENCE`): Experiencias complementarias en la misma zona ($\le 6\text{ km}$).
+  - Nivel 3 (`REQUIRES_ADJUSTMENTS`): Lugares que demandan mayor tiempo de traslado o reprogramación.
+- [x] **Reorganización Inteligente con Explicaciones y Sin Mutación Unilateral (Paso 6.6)**:
+  - `POST /trips/:id/items/:itemId/reorganize-preview`: Calcula desplazamientos acumulados hacia adelante, detalla el motivo y alerta si excede el límite del día (`scheduleOverflowsDay`).
+  - No modifica la base de datos hasta que el usuario confirma explícitamente vía `POST /trips/:id/apply-reorganization`.
 - [x] **Experiencia Visual en Web y Móvil**:
-  - Web (`PlaceDetail.tsx`): Botón para iniciar actividad, banner activo con estado de verificación, botón de geolocalización GPS vía navegador, modal de cuestionario adaptado y lista de opiniones comunitarias con badge `[✓ Visita Verificada]`.
-  - Mobile (`App.tsx`): Tarjeta de experiencia propia en modal, verificación de proximidad por coordenadas, selector de estrellas y lista de testimonios nativos.
+  - Web: `TripPlannerPanel.tsx` integrado en `page.tsx` con tabs de días, visualización de actividades con distancias, modal de alternativas en 3 niveles y previsualización de reacomodo de horarios.
+  - Mobile: Pestaña `🗺️ Viajes` en `App.tsx`, conmutador de cabecera interna para testing, modal de alternativas clasificadas en 3 niveles y modal interactivo de reorganización.
 - [x] **Verificación Global y Puerta de Calidad**:
-  - `pnpm turbo run build typecheck test` superado con 23/23 tareas exitosas.
-  - 115 pruebas automatizadas pasando al 100% sin costo de APIs externas ($0.00).
+  - 133 pruebas automatizadas pasando al 100% sin costo de APIs externas ($0.00).

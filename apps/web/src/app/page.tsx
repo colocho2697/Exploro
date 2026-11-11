@@ -17,6 +17,7 @@ import { LibraryPanel } from '../components/LibraryPanel';
 import { ModeSelection } from '../components/ModeSelection';
 import { PlaceCard } from '../components/PlaceCard';
 import { SurpriseMe } from '../components/SurpriseMe';
+import { TripPlannerPanel } from '../components/TripPlannerPanel';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { useLibrary } from '../hooks/useLibrary';
 import { useSession } from '../hooks/useSession';
@@ -56,6 +57,7 @@ export default function ExploroHomePage(): React.JSX.Element {
 
   const [showAuth, setShowAuth] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showTripPlanner, setShowTripPlanner] = useState(false);
   const [highlightSlug, setHighlightSlug] = useState<string | null>(null);
 
   // Fase 3: Ruteo y cálculo de distancias sin costo
@@ -211,6 +213,14 @@ export default function ExploroHomePage(): React.JSX.Element {
               Iniciar sesión
             </button>
           )}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setShowTripPlanner(true)}
+            style={{ borderColor: '#38bdf8', color: '#38bdf8' }}
+          >
+            🗺️ Itinerarios
+          </button>
           <button type="button" className="btn" onClick={() => setSelectedMode(null)}>
             Cambiar modalidad
           </button>
@@ -240,6 +250,17 @@ export default function ExploroHomePage(): React.JSX.Element {
             onRemoveItem={(cid, pid) => void library.removeFromCollection(cid, pid)}
             onRemoveFavorite={(pid) => void library.removeFavorite(pid)}
             onClose={() => setShowLibrary(false)}
+          />
+        )}
+        {showTripPlanner && (
+          <TripPlannerPanel
+            client={session.client}
+            isLoggedIn={Boolean(session.user)}
+            onClose={() => setShowTripPlanner(false)}
+            onRequireAuth={() => {
+              setShowTripPlanner(false);
+              setShowAuth(true);
+            }}
           />
         )}
 

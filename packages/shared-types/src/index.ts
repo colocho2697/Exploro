@@ -626,6 +626,156 @@ export const NATIVE_VISIT_WEIGHT_BONUS = {
   EXTERNAL: 1.0,
 } as const;
 
+// ============================================================================
+// FASE 6: PLANIFICADOR DE VIAJES (OCULTO)
+// ============================================================================
+
+export type TripStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+
+export type TripItemStatus = 'PLANNED' | 'COMPLETED' | 'SKIPPED';
+
+export type FlexibilityMinutes = 0 | 15 | 30 | 60;
+
+export type AlternativeMatchLevel =
+  | 'VERY_SIMILAR'
+  | 'RELATED_EXPERIENCE'
+  | 'REQUIRES_ADJUSTMENTS';
+
+export interface TripItemDTO {
+  id: string;
+  tripDayId: string;
+  placeId: string;
+  placeName?: string;
+  placeSlug?: string;
+  categorySlug?: string;
+  coordinates?: Coordinates;
+  activityId?: string | null;
+  orderIndex: number;
+  customTitle?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  durationMinutes: number;
+  transitMinutesFromPrev: number;
+  transitDistanceMetersFromPrev: number;
+  estimatedCost: number;
+  notes?: string | null;
+  status: TripItemStatus;
+}
+
+export interface TripDayDTO {
+  id: string;
+  tripId: string;
+  dayNumber: number;
+  date: string;
+  title?: string | null;
+  theme?: string | null;
+  items?: TripItemDTO[];
+}
+
+export interface TripDTO {
+  id: string;
+  userId: string;
+  destinationId?: string | null;
+  citySlug?: string | null;
+  title: string;
+  description?: string | null;
+  startDate: string;
+  endDate: string;
+  budgetTier: BudgetTier;
+  travelStyles: TravelStyle[];
+  flexibilityMinutes: FlexibilityMinutes;
+  status: TripStatus;
+  days?: TripDayDTO[];
+  totalEstimatedCost?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTripDTO {
+  destinationId?: string;
+  citySlug?: string;
+  title: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  budgetTier?: BudgetTier;
+  travelStyles?: TravelStyle[];
+  flexibilityMinutes?: FlexibilityMinutes;
+}
+
+export interface UpdateTripDTO {
+  title?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  budgetTier?: BudgetTier;
+  travelStyles?: TravelStyle[];
+  flexibilityMinutes?: FlexibilityMinutes;
+  status?: TripStatus;
+}
+
+export interface CreateTripItemDTO {
+  placeId: string;
+  activityId?: string;
+  customTitle?: string;
+  startTime?: string;
+  durationMinutes?: number;
+  notes?: string;
+}
+
+export interface UpdateTripItemDTO {
+  customTitle?: string;
+  startTime?: string;
+  durationMinutes?: number;
+  notes?: string;
+  status?: TripItemStatus;
+}
+
+export interface AssistedPlanRequestDTO {
+  citySlug: string;
+  startDate: string;
+  endDate: string;
+  budgetTier: BudgetTier;
+  travelStyles: TravelStyle[];
+  flexibilityMinutes?: FlexibilityMinutes;
+  title?: string;
+}
+
+export interface ActivityAlternativeOptionDTO {
+  placeId: string;
+  placeName: string;
+  placeSlug: string;
+  categorySlug: string;
+  overallScore: number;
+  distanceMetersFromOriginal: number;
+  estimatedCost: number;
+  estimatedDurationMins: number;
+  matchLevel: AlternativeMatchLevel;
+  explanation: string;
+  scheduleCompatible: boolean;
+  transitMinutesDifference: number;
+}
+
+export interface ShiftedItemProposal {
+  itemId: string;
+  placeName: string;
+  originalStartTime: string;
+  proposedStartTime: string;
+  originalEndTime: string;
+  proposedEndTime: string;
+  shiftMinutes: number;
+}
+
+export interface TripReorganizationImpactDTO {
+  requiresApproval: boolean;
+  reason: string;
+  affectedCount: number;
+  shiftedItems: ShiftedItemProposal[];
+  scheduleOverflowsDay: boolean;
+  recommendationMessage: string;
+}
+
+
 
 
 

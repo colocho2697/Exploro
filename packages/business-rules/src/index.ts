@@ -5,10 +5,13 @@ import {
   DataAvailabilityStatus,
   ExplorationMode,
   ExtractedAspectItem,
+  FlexibilityMinutes,
   ModeDescriptor,
   RestaurantReviewInput,
   ReviewType,
+  ShiftedItemProposal,
   TourismReviewInput,
+  TripReorganizationImpactDTO,
 } from '@exploro/shared-types';
 
 /**
@@ -1057,6 +1060,282 @@ export function formatNativeReviewSnippet(params: {
 
   return parts.join(' ');
 }
+
+// ============================================================================
+// FASE 6: REGLAS DEL MOTOR DEL PLANIFICADOR DE VIAJES (OCULTO)
+// ============================================================================
+
+export interface ScheduleCandidateInput {
+  placeId: string;
+  name: string;
+  slug: string;
+  categorySlug: string;
+  subcategorySlug?: string;
+  lat: number;
+  lng: number;
+  overallScore: number;
+  priceTier: BudgetTier;
+  estimatedCost: number;
+  estimatedDurationMins: number;
+  openingHour?: number | null; // e.g. 9 for 09:00
+  closingHour?: number | null; // e.g. 21 for 21:00
+  tags?: string[];
+}
+
+/**
+ * Regla de Negocio (Paso 6.3 y 6.5):
+ * Valida compatibilidad horaria evitando horarios imposibles o fuera de operación.
+ * Principio: "No colocar actividades en horarios imposibles ni asumir apertura sin datos."
+ */
+export function evaluateScheduleCompatibility(params: {
+  startHour: number; // e.g. 14.5 para 14:30
+  durationMinutes: number;
+  transitMinutes: number;
+  flexibilityMinutes: FlexibilityMinutes;
+  openingHour?: number | null;
+  closingHour?: number | null;
+}): { compatible: boolean; reason?: string; adjustedStartHour?: number } {
+  const {
+    startHour,
+    durationMinutes,
+    transitMinutes,
+    flexibilityMinutes,
+    openingHour,
+    closingHour,
+  } = params;
+
+  const durationHours = durationMinutes / 60;
+  const transitHours = transitMinutes / 60;
+  const endHour = startHour + durationHours;
+  const totalWindowHours = durationHours + transitHours;
+
+  // Horarios imposibles: más allá de medianoche (24.0) o antes de 07:00
+  if (startHour < 7.0) {
+    return {
+      compatible: false,
+      reason: 'El horario propuesto es antes de las 07:00 am.',
+    };
+  }
+  if (endHour > 23.5 || startHour + totalWindowHours > 24.0) {
+    return {
+      compatible: false,
+      reason: 'La actividad terminaría después de las 23:30 pm (horario imposible).',
+    };
+  }
+
+  // Si tenemos horario de apertura verificado
+  if (openingHour !== undefined && openingHour !== null) {
+    if (startHour < openingHour) {
+      const flexHours = flexibilityMinutes / 60;
+      if (startHour + flexHours >= openingHour) {
+        return {
+          compatible: true,
+          adjustedStartHour: openingHour,
+          reason: `Ajustado dentro de la flexibilidad (+${flexibilityMinutes}m) para coincidir con la apertura (${openingHour}:00).`,
+        };
+      }
+      return {
+        compatible: false,
+        reason: `El lugar abre a las ${openingHour}:00 y no cabe en la franja actual.`,
+      };
+    }
+  }
+
+  // Si tenemos horario de cierre verificado
+  if (closingHour !== undefined && closingHour !== null) {
+    if (endHour > closingHour) {
+      const flexHours = flexibilityMinutes / 60;
+      if (endHour - flexHours <= closingHour) {
+        return {
+          compatible: true,
+          adjustedStartHour: Math.max(openingHour ?? 7, closingHour - durationHours),
+          reason: `Ajustado dentro de la flexibilidad (+${flexibilityMinutes}m) para concluir antes del cierre (${closingHour}:00).`,
+        };
+      }
+      return {
+        compatible: false,
+        reason: `La actividad concluye después del horario de cierre (${closingHour}:00).`,
+      };
+    }
+  }
+
+  return { compatible: true };
+}
+
+/**
+ * Regla de Negocio (Paso 6.4):
+ * Clasifica alternativas para una actividad en 3 niveles estrictos:
+ * 1. Muy similares: misma categoría/subcategoría, distancia <= 2km, duración afín, presupuesto compatible.
+ * 2. Experiencias relacionadas: categoría compatible o estilo de viaje afín, distancia <= 5km.
+ * 3. Otras opciones que requieren ajustes: distancias > 5km o que exigen reacomodo horario.
+ */
+export function classifyActivityAlternatives(
+  original: ScheduleCandidateInput,
+  candidates: ScheduleCandidateInput[],
+  flexibilityMinutes: FlexibilityMinutes = 15
+): {
+  verySimilar: ScheduleCandidateInput[];
+  relatedExperiences: ScheduleCandidateInput[];
+  requiresAdjustments: ScheduleCandidateInput[];
+} {
+  const verySimilar: ScheduleCandidateInput[] = [];
+  const relatedExperiences: ScheduleCandidateInput[] = [];
+  const requiresAdjustments: ScheduleCandidateInput[] = [];
+
+  for (const cand of candidates) {
+    if (cand.placeId === original.placeId) continue;
+
+    const distance = verifyProximityForVisit(
+      original.lat,
+      original.lng,
+      cand.lat,
+      cand.lng,
+      50000
+    ).distanceMeters;
+
+    const durationDiff = Math.abs(
+      cand.estimatedDurationMins - original.estimatedDurationMins
+    );
+    const sameCategory =
+      cand.categorySlug.toLowerCase() === original.categorySlug.toLowerCase();
+    const sameSubcategory =
+      cand.subcategorySlug &&
+      original.subcategorySlug &&
+      cand.subcategorySlug.toLowerCase() === original.subcategorySlug.toLowerCase();
+
+    // Nivel 1: Muy similares (misma subcategoría o misma categoría si no hay subcat, distancia cercana <= 2.5km, duración afín)
+    const isVerySimilar =
+      (sameSubcategory || (!original.subcategorySlug && sameCategory)) &&
+      distance <= 2500 &&
+      durationDiff <= (30 + flexibilityMinutes);
+
+    if (isVerySimilar) {
+      verySimilar.push(cand);
+    }
+    // Nivel 2: Experiencias relacionadas (categoría afín o subcategoría complementaria, distancia <= 6km)
+    else if ((sameCategory || distance <= 5000) && distance <= 6000 && durationDiff <= 60) {
+      relatedExperiences.push(cand);
+    }
+    // Nivel 3: Requiere ajustes (mayor distancia o ajuste de tiempos)
+    else {
+      requiresAdjustments.push(cand);
+    }
+  }
+
+  // Ordenar cada nivel por reputación determinista
+  const sortByScore = (a: ScheduleCandidateInput, b: ScheduleCandidateInput) =>
+    b.overallScore - a.overallScore;
+
+  return {
+    verySimilar: verySimilar.sort(sortByScore),
+    relatedExperiences: relatedExperiences.sort(sortByScore),
+    requiresAdjustments: requiresAdjustments.sort(sortByScore),
+  };
+}
+
+export interface DayItemSchedule {
+  id: string;
+  placeName: string;
+  startTime: string; // "HH:MM"
+  durationMinutes: number;
+  transitMinutesFromPrev: number;
+}
+
+/**
+ * Regla de Negocio (Paso 6.6):
+ * Reorganización inteligente ante una sustitución o cambio de duración:
+ * - Identifica únicamente las actividades afectadas.
+ * - Recalcula deltas de tiempo.
+ * - Explica el motivo.
+ * - Regla: "La IA nunca debe modificar unilateralmente el itinerario; solicita aprobación."
+ */
+export function detectReorganizationImpact(params: {
+  modifiedItemId: string;
+  newStartTime: string; // "HH:MM"
+  newDurationMinutes: number;
+  currentItems: DayItemSchedule[];
+  flexibilityMinutes: FlexibilityMinutes;
+}): TripReorganizationImpactDTO {
+  const { modifiedItemId, newStartTime, newDurationMinutes, currentItems } =
+    params;
+
+  const modIdx = currentItems.findIndex((it) => it.id === modifiedItemId);
+  if (modIdx === -1) {
+    return {
+      requiresApproval: false,
+      reason: 'No se encontró la actividad en el itinerario.',
+      affectedCount: 0,
+      shiftedItems: [],
+      scheduleOverflowsDay: false,
+      recommendationMessage: 'Sin cambios requeridos.',
+    };
+  }
+
+  const [newH, newM] = newStartTime.split(':').map(Number);
+  let currentEndMinutes = (newH ?? 10) * 60 + (newM ?? 0) + newDurationMinutes;
+
+  const shiftedItems: ShiftedItemProposal[] = [];
+  let overflows = false;
+
+  for (let i = modIdx + 1; i < currentItems.length; i++) {
+    const item = currentItems[i]!;
+    const [origH, origM] = item.startTime.split(':').map(Number);
+    const origStartMinutes = (origH ?? 12) * 60 + (origM ?? 0);
+    const origEndMinutes = origStartMinutes + item.durationMinutes;
+
+    // Próximo inicio debe ser al menos currentEndMinutes + transit
+    const minRequiredStart = currentEndMinutes + item.transitMinutesFromPrev;
+
+    if (minRequiredStart > origStartMinutes) {
+      const shiftMinutes = minRequiredStart - origStartMinutes;
+      const propStartH = Math.floor(minRequiredStart / 60);
+      const propStartM = minRequiredStart % 60;
+      const propEndMinutes = minRequiredStart + item.durationMinutes;
+      const propEndH = Math.floor(propEndMinutes / 60);
+      const propEndM = propEndMinutes % 60;
+
+      if (propEndH >= 23 && propEndM > 30) {
+        overflows = true;
+      }
+
+      shiftedItems.push({
+        itemId: item.id,
+        placeName: item.placeName,
+        originalStartTime: item.startTime,
+        proposedStartTime: `${String(propStartH).padStart(2, '0')}:${String(propStartM).padStart(2, '0')}`,
+        originalEndTime: `${String(Math.floor(origEndMinutes / 60)).padStart(2, '0')}:${String(origEndMinutes % 60).padStart(2, '0')}`,
+        proposedEndTime: `${String(propEndH).padStart(2, '0')}:${String(propEndM).padStart(2, '0')}`,
+        shiftMinutes,
+      });
+
+      currentEndMinutes = propEndMinutes;
+    } else {
+      // No afecta más allá
+      currentEndMinutes = origEndMinutes;
+    }
+  }
+
+  const requiresApproval = shiftedItems.length > 0;
+  const reason = requiresApproval
+    ? `El cambio en la actividad requiere desplazar ${shiftedItems.length} actividad(es) posterior(es) para respetar tiempos de traslado y visita.`
+    : 'El cambio no afecta las actividades posteriores del día.';
+
+  const recommendationMessage = overflows
+    ? 'Atención: Este reacomodo hace que el día concluya muy tarde (> 23:30). Te sugerimos mover alguna actividad al día siguiente.'
+    : requiresApproval
+    ? `Se propone ajustar ${shiftedItems.length} actividad(es). ¿Deseas aplicar estos cambios?`
+    : 'Horarios compatibles sin impacto en el resto del día.';
+
+  return {
+    requiresApproval,
+    reason,
+    affectedCount: shiftedItems.length,
+    shiftedItems,
+    scheduleOverflowsDay: overflows,
+    recommendationMessage,
+  };
+}
+
 
 
 
