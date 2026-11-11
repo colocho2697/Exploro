@@ -65,6 +65,7 @@ services:
     container_name: exploro-ai-engine
     restart: unless-stopped
     environment:
+      PYTHONPATH: /app
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-dev_internal_service_key_exploro_ai_2026}
       AI_PROVIDER: ${AI_PROVIDER:-ollama_zero_cost}
       AI_DEFAULT_MODEL: ${AI_DEFAULT_MODEL:-qwen2.5:7b}
