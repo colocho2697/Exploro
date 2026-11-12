@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS cities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     country_id UUID NOT NULL REFERENCES countries(id) ON DELETE RESTRICT,
     name VARCHAR(120) NOT NULL,
-    state_code VARCHAR(10),
+    state_code VARCHAR(100),
     slug VARCHAR(140) UNIQUE NOT NULL,
     center_point GEOGRAPHY(Point, 4326) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -58,6 +58,8 @@ function getCategorySubtitleLines(
         typeof t === 'string' &&
         !t.startsWith('★') &&
         !t.startsWith('🏆') &&
+        !t.startsWith('(') &&
+        !t.startsWith('pts:') &&
         !t.startsWith('gp_photos:')
     )
     .slice(0, 3);

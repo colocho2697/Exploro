@@ -302,6 +302,25 @@ export function computeMultiSourceScore(
     ? `${revMatch[1]} reseñas`
     : `${rawReviewsCount}+ reseñas`;
 
+  // Si el backend ya calculó el desglose exacto Multi-Fuente (pts:Maps/Reddit/Social)
+  const ptsTag = place.tags.find((t) => typeof t === 'string' && t.startsWith('pts:'));
+  if (ptsTag) {
+    const parts = ptsTag.replace('pts:', '').split('/').map(Number);
+    if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+      const [mPts, rPts, sPts] = parts as [number, number, number];
+      const total = Math.min(99, mPts + rPts + sPts);
+      return {
+        totalScore: total,
+        mapsStars: Number(mapsStars.toFixed(1)),
+        mapsReviewsLabel,
+        mapsPoints: mPts,
+        redditPoints: rPts,
+        socialPoints: sPts,
+        sourcesSummary: 'Google Maps · Reddit & Comunidad · Redes Sociales',
+      };
+    }
+  }
+
   // Seed determinístico por slug para que ningún lugar tenga valores duplicados por defecto
   const seed = (place.slug || 'place')
     .split('')
