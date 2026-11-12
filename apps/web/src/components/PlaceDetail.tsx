@@ -12,6 +12,7 @@ import {
   buildGoogleMapsUrl,
   buildWazeUrl,
   computeMultiSourceScore,
+  formatCleanPrice,
   formatDistanceKm,
   getPlacePhotoDetails,
   parseRecommendationReason,
@@ -127,17 +128,6 @@ function getCategorySubtitleLines(
         highlightTitle: 'Productos destacados y experiencia de compra',
       };
   }
-}
-
-function formatCleanPrice(place: Pick<PlaceCardDTO, 'priceStatus' | 'priceTier' | 'avgPriceMin' | 'avgPriceMax' | 'currencyCode'>): string {
-  if (place.priceStatus !== 'CONFIRMED') return 'Consultar precio';
-  if (place.priceTier === 'FREE' || (place.avgPriceMin === 0 && place.avgPriceMax === 0)) {
-    return 'Gratis';
-  }
-  if (place.avgPriceMin !== null && place.avgPriceMax !== null) {
-    return `$${place.avgPriceMin}–$${place.avgPriceMax} ${place.currencyCode}`;
-  }
-  return place.priceTier;
 }
 
 /**
@@ -596,98 +586,91 @@ export function PlaceDetail({
 
           <hr style={{ border: 'none', borderTop: '1px solid #ebebeb' }} />
 
-          {/* Bloque de Curaduría / Respaldo (equivalente al bloque de Anfitrión en Airbnb) */}
+          {/* Bloque de Curaduría / Respaldo estilo Airbnb */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.95rem' }}>
             <div
               style={{
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #10b981 0%, #0284c7 100%)',
-                color: '#ffffff',
+                background: '#ecfdf5',
+                color: '#059669',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1.35rem',
+                fontSize: '1.15rem',
                 fontWeight: 800,
+                border: '1.5px solid #a7f3d0',
                 flexShrink: 0,
-                position: 'relative',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
-
               }}
             >
-              🏆
-              <span
-                style={{
-                  position: 'absolute',
-                  bottom: -2,
-                  right: -2,
-                  background: '#58CC02',
-                  color: '#fff',
-                  borderRadius: '50%',
-                  width: 18,
-                  height: 18,
-                  fontSize: '11px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid #fff',
-                }}
-              >
-                ✓
-              </span>
+              ✓
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: '.96rem', color: '#222222' }}>
-                Selección Destacada · {activePlace.categoryName}
+                Recomendación Verificada · {activePlace.categoryName}
               </div>
               <div style={{ color: '#717171', fontSize: '.84rem' }}>
-                Respaldado en {score.sourcesSummary}
+                {score.sourcesSummary}
               </div>
             </div>
           </div>
 
           <hr style={{ border: 'none', borderTop: '1px solid #ebebeb' }} />
 
-          {/* 3 FILAS DE DETALLES CON ÍCONO (Igual que en la captura de Airbnb, adaptadas por categoría) */}
+          {/* 3 FILAS DE DETALLES CON DISEÑO LIMPIO */}
           <div style={{ display: 'grid', gap: '1.15rem' }}>
             {/* Fila 1: Ubicación y cercanía real */}
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-              <span
+            <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+              <div
                 style={{
-                  fontSize: '1.35rem',
                   width: 32,
-                  textAlign: 'center',
+                  height: 32,
+                  borderRadius: 8,
+                  background: '#f4f4f5',
+                  color: '#222222',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '.95rem',
+                  fontWeight: 700,
                   flexShrink: 0,
                   marginTop: 2,
                 }}
               >
                 📍
-              </span>
+              </div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
                   {activePlace.addressText ?? activePlace.cityName}
                   {distanceLabel ? ` · A ${distanceLabel} de ti` : ''}
                 </div>
                 <div style={{ color: '#717171', fontSize: '.86rem', marginTop: 2 }}>
-                  Dentro de tu radio de 5 km a la redonda. Toca «Ir ahora» abajo para abrir la ruta directa.
+                  Ubicación verificada. Toca «Ir ahora» para abrir la ruta directa.
                 </div>
               </div>
             </div>
 
             {/* Fila 2: Lo elegiría para + Detalles específicos de la categoría */}
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-              <span
+            <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+              <div
                 style={{
-                  fontSize: '1.35rem',
                   width: 32,
-                  textAlign: 'center',
+                  height: 32,
+                  borderRadius: 8,
+                  background: '#ecfdf5',
+                  color: '#059669',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '.95rem',
+                  fontWeight: 700,
                   flexShrink: 0,
                   marginTop: 2,
                 }}
               >
-                {catInfo.highlightIcon}
-              </span>
+                ★
+              </div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
                   {parsedReason.choiceReason}
@@ -716,7 +699,7 @@ export function PlaceDetail({
                           color: '#222222',
                         }}
                       >
-                        🍴 {spec}
+                        {spec}
                       </span>
                     ))}
                   </div>
@@ -742,33 +725,37 @@ export function PlaceDetail({
             </div>
 
             {/* Fila 3: Desglose de Puntaje Multi-Fuente (Google Maps + Reddit + Redes Sociales) */}
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-              <span
+            <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+              <div
                 style={{
-                  fontSize: '1.35rem',
                   width: 32,
-                  textAlign: 'center',
+                  height: 32,
+                  borderRadius: 8,
+                  background: '#f0f9ff',
+                  color: '#0284c7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '.85rem',
+                  fontWeight: 800,
                   flexShrink: 0,
                   marginTop: 2,
                 }}
               >
-                📊
-              </span>
+                %
+              </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
-                  Puntaje Compuesto Exploro: {score.totalScore} / 100 pts
-                </div>
-                <div style={{ color: '#717171', fontSize: '.84rem', marginTop: 2 }}>
-                  Combinamos valoraciones y volumen de Google Maps con conversaciones en Reddit y presencia en redes sociales:
+                  Puntaje Exploro: {score.totalScore} / 100
                 </div>
 
                 <div
                   style={{
-                    marginTop: '.65rem',
+                    marginTop: '.55rem',
                     display: 'grid',
-                    gap: '.5rem',
+                    gap: '.45rem',
                     background: '#f8fafc',
-                    padding: '.8rem .9rem',
+                    padding: '.75rem .85rem',
                     borderRadius: 14,
                     border: '1px solid #e5e5e5',
                   }}
@@ -785,12 +772,12 @@ export function PlaceDetail({
                         marginBottom: 3,
                       }}
                     >
-                      <span>📍 Valoraciones Google Maps ({score.mapsStars} ★ · {score.mapsReviewsLabel})</span>
-                      <span style={{ color: '#0284c7' }}>{score.mapsPoints} / 45 pts</span>
+                      <span>Google Maps ({score.mapsStars} ★ · {score.mapsReviewsLabel})</span>
+                      <span style={{ color: '#0284c7' }}>{score.mapsPoints} / 45</span>
                     </div>
                     <div
                       style={{
-                        height: 7,
+                        height: 6,
                         borderRadius: 999,
                         background: '#e5e7eb',
                         overflow: 'hidden',
@@ -800,7 +787,7 @@ export function PlaceDetail({
                         style={{
                           width: `${Math.round((score.mapsPoints / 45) * 100)}%`,
                           height: '100%',
-                          background: '#1CB0F6',
+                          background: '#0284c7',
                           borderRadius: 999,
                         }}
                       />
@@ -819,12 +806,12 @@ export function PlaceDetail({
                         marginBottom: 3,
                       }}
                     >
-                      <span>💬 Comunidad en Reddit (r/Honduras & viajeros)</span>
-                      <span style={{ color: '#ea580c' }}>{score.redditPoints} / 30 pts</span>
+                      <span>Reddit r/Honduras & comunidad</span>
+                      <span style={{ color: '#ea580c' }}>{score.redditPoints} / 30</span>
                     </div>
                     <div
                       style={{
-                        height: 7,
+                        height: 6,
                         borderRadius: 999,
                         background: '#e5e7eb',
                         overflow: 'hidden',
@@ -834,7 +821,7 @@ export function PlaceDetail({
                         style={{
                           width: `${Math.round((score.redditPoints / 30) * 100)}%`,
                           height: '100%',
-                          background: '#FF9600',
+                          background: '#ea580c',
                           borderRadius: 999,
                         }}
                       />
@@ -853,12 +840,12 @@ export function PlaceDetail({
                         marginBottom: 3,
                       }}
                     >
-                      <span>📱 Redes Sociales & Guías Locales (Qué Plan Tegus / IG / TikTok)</span>
-                      <span style={{ color: '#16a34a' }}>{score.socialPoints} / 25 pts</span>
+                      <span>Redes Sociales & Guías Locales</span>
+                      <span style={{ color: '#16a34a' }}>{score.socialPoints} / 25</span>
                     </div>
                     <div
                       style={{
-                        height: 7,
+                        height: 6,
                         borderRadius: 999,
                         background: '#e5e7eb',
                         overflow: 'hidden',
@@ -868,7 +855,7 @@ export function PlaceDetail({
                         style={{
                           width: `${Math.round((score.socialPoints / 25) * 100)}%`,
                           height: '100%',
-                          background: '#58CC02',
+                          background: '#16a34a',
                           borderRadius: 999,
                         }}
                       />
@@ -880,17 +867,17 @@ export function PlaceDetail({
                 {parsedReason.caveat && (
                   <div
                     style={{
-                      marginTop: '.6rem',
-                      padding: '.55rem .75rem',
-                      borderRadius: 10,
+                      marginTop: '.5rem',
+                      padding: '.45rem .65rem',
+                      borderRadius: 8,
                       background: '#fffbeb',
                       border: '1px solid #fde68a',
                       color: '#b45309',
-                      fontSize: '.82rem',
+                      fontSize: '.8rem',
                       fontWeight: 700,
                     }}
                   >
-                    ⚠️ {parsedReason.caveat}
+                    Observación: {parsedReason.caveat}
                   </div>
                 )}
               </div>
@@ -1033,7 +1020,12 @@ export function PlaceDetail({
               textDecoration: 'underline',
             }}
           >
-            {formatCleanPrice(activePlace)}
+            {formatCleanPrice(
+              activePlace.avgPriceMin,
+              activePlace.avgPriceMax,
+              activePlace.currencyCode,
+              activePlace.priceTier
+            )}
           </div>
           <div style={{ fontSize: '.78rem', color: '#717171', marginTop: 1 }}>
             {activePlace.categorySlug === 'comida' ? 'Promedio por persona' : 'Costo estimado'}

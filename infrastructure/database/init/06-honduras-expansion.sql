@@ -61,137 +61,139 @@ INSERT INTO places (
 ) VALUES
 -- =============================================================================
 -- TOP 13 RESTAURANTES CERCA DE COLONIA FLORENCIA NORTE (< 5 KM)
+-- Precios oficiales en Lempiras (HNL) y tags concisos sin sobrecarga de texto
 -- =============================================================================
 
 -- #1. El Morito – La Hacienda
 ('77777777-7777-7777-7777-777777777821', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'El Morito – La Hacienda', 'el morito la hacienda', 'el-morito-la-hacienda-tegucigalpa',
- 'Mariscos, ceviches, pulpo al ajillo y sopas marineras. Es la opción #1 con mayor respaldo por volumen de reseñas (más de 14,200 opiniones verificadas con 4.8 ★) y destacado en la guía local Qué Plan Tegus.',
+ 'Mariscos frescos, ceviches, pulpo al ajillo y sopas marineras. Opción #1 por volumen de reseñas en Tegucigalpa.',
  'Boulevard La Hacienda (frente a Excel Automotriz), Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1743082, 14.0869611), 4326)::geography,
- NULL, 'MEDIUM', 12.00, 26.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.8 (14,261 reseñas)","🏆 #1 Mejor experiencia general","Qué Plan Tegus","Mariscos y ceviches","Pareja o familia"]'::jsonb, TRUE),
+ NULL, 'MEDIUM', 300.00, 650.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.8 ★ (14,261 reseñas)","Mariscos & Ceviches","Qué Plan Tegus"]'::jsonb, TRUE),
 
 -- #2. Restaurante Portobello
 ('77777777-7777-7777-7777-777777777822', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Restaurante Portobello', 'restaurante portobello', 'restaurante-portobello-tegucigalpa',
- 'Pizza artesanal, pastas frescas, mejillones y sangría. Destaca por su ambiente acogedor, su estilo italiano clásico y su cercanía inmediata a Colonia Florencia Norte.',
+ 'Pizza artesanal al horno de leña, pastas frescas, mejillones al vino y sangría de la casa en ambiente clásico.',
  '01 Boulevard Suyapa, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1759742, 14.0822583), 4326)::geography,
- NULL, 'MEDIUM', 11.00, 24.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.4 (772 reseñas)","🍕 Selección Pizza y pasta","Cocina italiana","Sangría y mejillones","Salida tranquila"]'::jsonb, TRUE),
+ NULL, 'MEDIUM', 250.00, 500.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.4 ★ (772 reseñas)","Pizza & Pasta","Cocina Italiana"]'::jsonb, TRUE),
 
 -- #3. La Pana
 ('77777777-7777-7777-7777-777777777823', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'La Pana — Cocina Italiana', 'la pana cocina italiana', 'la-pana-tegucigalpa',
- 'Cocina italiana auténtica con pizzas, lasañas y pastas. Las recomendaciones y la guía Qué Plan Tegus destacan sus porciones generosas y su sobresaliente relación entre precio y cantidad.',
+ 'Cocina italiana casera con lasañas abundantes, pastas y pizzas de masa fresca. Destacado por su relación precio-cantidad.',
  'Boulevard Suyapa, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1848920, 14.0854394), 4326)::geography,
- NULL, 'LOW', 8.00, 16.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.4 (251 reseñas)","💰 Mejor relación cantidad-precio","Qué Plan Tegus","Porciones generosas","Lasañas y pizzas"]'::jsonb, TRUE),
+ NULL, 'LOW', 180.00, 350.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.4 ★ (251 reseñas)","Porciones generosas","Qué Plan Tegus"]'::jsonb, TRUE),
 
 -- #4. Alto Grano Café
 ('77777777-7777-7777-7777-777777777824', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Alto Grano Café', 'alto grano cafe', 'alto-grano-cafe-tegucigalpa',
- 'Café de especialidad hondureño, tostadas de aguacate y sándwich de cerdo ahumado. Destacado en Qué Plan Tegus con excelentes comentarios sobre su ambiente y atención.',
+ 'Café de especialidad hondureño, tostadas de aguacate y sándwiches gourmet en ambiente tranquilo.',
  'Boulevard La Hacienda, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1743291, 14.0858897), 4326)::geography,
- NULL, 'LOW', 6.00, 14.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.8 (72 reseñas)","☕ Selección Desayuno o brunch","Qué Plan Tegus","Café de especialidad","Brunch"]'::jsonb, TRUE),
+ NULL, 'LOW', 120.00, 240.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.8 ★ (72 reseñas)","Café de especialidad","Brunch"]'::jsonb, TRUE),
 
 -- #5. Tacos Tado
 ('77777777-7777-7777-7777-777777777825', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Tacos Tado', 'tacos tado', 'tacos-tado-tegucigalpa',
- 'Tacos, nachos y chilaquiles con precios accesibles (consumos aproximados de L100–200 por persona / $4–8 USD) muy cerca de Florencia Norte.',
+ 'Tacos de pastor, suadero, chilaquiles y nachos a precios muy accesibles.',
  'Boulevard Suyapa / Col. Florencia Norte, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1805350, 14.0846545), 4326)::geography,
- NULL, 'LOW', 4.00, 8.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.1 (585 reseñas)","🌮 Selección Algo económico","L100–200 por persona","Tacos y chilaquiles"]'::jsonb, TRUE),
+ NULL, 'LOW', 100.00, 200.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.1 ★ (585 reseñas)","Tacos & Nachos","Económico"]'::jsonb, TRUE),
 
 -- #6. T.G.I. Fridays – Multiplaza
 ('77777777-7777-7777-7777-777777777826', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'T.G.I. Fridays • Multiplaza TGU', 'tgi fridays multiplaza tgu', 'tgi-fridays-multiplaza-tegucigalpa',
- 'Hamburguesas, costillas, entradas para compartir y cócteles a 1 km de Florencia Norte. Buena opción para grupos y amigos.',
+ 'Costillas BBQ, hamburguesas, entradas para compartir y cócteles en Multiplaza.',
  'Mall Multiplaza, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1841291, 14.0885907), 4326)::geography,
- NULL, 'HIGH', 15.00, 32.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.1 (808 reseñas)","🍹 Grupos y amigos","Costillas y hamburguesas","Multiplaza"]'::jsonb, TRUE),
+ NULL, 'HIGH', 350.00, 600.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.1 ★ (808 reseñas)","Hamburguesas & Costillas","Multiplaza"]'::jsonb, TRUE),
 
 -- #7. Matambritas – Gourmet Center
 ('77777777-7777-7777-7777-777777777827', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Matambritas • Gourmet Center', 'matambritas gourmet center', 'matambritas-gourmet-center-tegucigalpa',
- 'Hamburguesas grandes al carbón y combinaciones especiales. Recomendación recurrente en hilos de Reddit (r/Honduras) cuando preguntan dónde comer las mejores hamburguesas en Tegucigalpa.',
+ 'Hamburguesas grandes al carbón y combinaciones con queso fundido y tocino.',
  'Gourmet Center, Bulevar Morazán, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1862279, 14.1013674), 4326)::geography,
- NULL, 'MEDIUM', 9.00, 18.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.3 (864 reseñas)","🍔 Selección Hamburguesas","Reddit r/Honduras","Porciones contundentes"]'::jsonb, TRUE),
+ NULL, 'MEDIUM', 180.00, 340.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.3 ★ (864 reseñas)","Hamburguesas","Reddit r/Honduras"]'::jsonb, TRUE),
 
 -- #8. Pizza House – Palmira
 ('77777777-7777-7777-7777-777777777828', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Pizza House — Palmira', 'pizza house palmira', 'pizza-house-palmira-tegucigalpa',
- 'Pizza artesanal, pastas y comida italiana con más de 1,000 reseñas. Los comensales destacan especialmente la pizza Carnívora y el punto de su masa.',
+ 'Pizza artesanal crujiente, pizza Carnívora de la casa y calzones italianos.',
  'Calle de la Colonia Palmira, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1948633, 14.1009762), 4326)::geography,
- NULL, 'MEDIUM', 10.00, 20.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.5 (1,021 reseñas)","🍕 Pizza Carnívora","Masa artesanal","Amigos y familia"]'::jsonb, TRUE),
+ NULL, 'MEDIUM', 220.00, 420.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.5 ★ (1,021 reseñas)","Pizza Carnívora","Palmira"]'::jsonb, TRUE),
 
 -- #9. Café Honoré
 ('77777777-7777-7777-7777-777777777829', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Café Honoré', 'cafe honore', 'cafe-honore-tegucigalpa',
- 'Café-restaurante estilo bistró con platos preparados, deli, ceviches, tablas de quesos, embutidos y repostería europea a 1.1 km de Florencia Norte.',
+ 'Deli bistró con tablas de quesos y embutidos europeos, ceviches finos y repostería francesa.',
  'Avenida Juan Lindo, Col. Palmira / Las Minitas, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1957092, 14.1002910), 4326)::geography,
- NULL, 'MEDIUM', 12.00, 25.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.4 (775 reseñas)","🥐 Deli, quesos y postres","Comida tranquila","Variedad gourmet"]'::jsonb, TRUE),
+ NULL, 'MEDIUM', 250.00, 500.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.4 ★ (775 reseñas)","Deli & Repostería","Las Minitas"]'::jsonb, TRUE),
 
 -- #10. Usami
 ('77777777-7777-7777-7777-777777777830', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Usami — Cocina Japonesa', 'usami cocina japonesa', 'usami-sushi-tegucigalpa',
- 'Sushi fresco, ramen, tempura y platos tradicionales japoneses a menos de 600 metros de Colonia Florencia Norte. Excelente alternativa para variar de pizzas y hamburguesas.',
+ 'Sushi fresco, ramen tradicional caliente y tempura en Lomas del Guijarro.',
  'Lomas del Guijarro Sur, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1892013, 14.0966759), 4326)::geography,
- NULL, 'MEDIUM', 12.00, 24.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.4 (1,039 reseñas)","🍣 Selección Sushi y ramen","Cocina japonesa","Tempura y rolls"]'::jsonb, TRUE),
+ NULL, 'MEDIUM', 260.00, 480.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.4 ★ (1,039 reseñas)","Sushi & Ramen","Lomas del Guijarro"]'::jsonb, TRUE),
 
 -- #11. Tatos Wings & Grill (Mención directa en Reddit r/Honduras)
 ('77777777-7777-7777-7777-777777777831', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Tato''s Wings • Col. San Carlos', 'tatos wings col san carlos', 'tatos-wings-tegucigalpa',
- 'Especialistas en alitas, boneless y salsas de la casa. Destacado directamente en las conversaciones de Reddit (r/Honduras) como el referente #1 para comer alitas en Tegucigalpa.',
+ 'Alitas y boneless con salsas caseras. La opción más recomendada en Reddit r/Honduras.',
  'Colonia San Carlos, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1904433, 14.1008217), 4326)::geography,
- NULL, 'LOW', 7.00, 15.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'COMMUNITY_VERIFIED',
- '["★ 4.3 (737 reseñas)","🍗 Selección Alitas","Reddit r/Honduras","Boneless y salsas","Calidad-precio"]'::jsonb, TRUE),
+ NULL, 'LOW', 160.00, 300.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'COMMUNITY_VERIFIED',
+ '["4.3 ★ (737 reseñas)","Alitas & Boneless","Reddit r/Honduras"]'::jsonb, TRUE),
 
 -- #12. Charlie's Burgers & Wings (Mención directa en Qué Plan Tegus)
 ('77777777-7777-7777-7777-777777777832', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Charlie''s Burgers Wings', 'charlies burgers wings', 'charlies-burgers-wings-tegucigalpa',
- 'Hamburguesas artesanales y alitas seleccionadas en la guía gastronómica local Qué Plan Tegus por su sabor consistente y ambiente relajado.',
+ 'Smash burgers artesanales y alitas crujientes destacadas en Qué Plan Tegus.',
  'Tegucigalpa, Francisco Morazán',
  ST_SetSRID(ST_MakePoint(-87.2274820, 14.1297116), 4326)::geography,
- NULL, 'LOW', 8.00, 16.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
- '["★ 4.1 (74 reseñas)","🍔 Qué Plan Tegus","Hamburguesas y alitas","Sabor casero","Ambiente casual"]'::jsonb, TRUE),
+ NULL, 'LOW', 170.00, 290.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'VERIFIED',
+ '["4.1 ★ (74 reseñas)","Smash Burgers","Alitas"]'::jsonb, TRUE),
 
 -- #13. Mateos Burgers (Mención directa en Reddit r/Honduras)
 ('77777777-7777-7777-7777-777777777833', '33333333-3333-3333-3333-333333333311',
  '22222222-2222-2222-2222-222222222211', '44444444-4444-4444-4444-444444444401', NULL,
  'Restaurante Mateos • Plaza Martín', 'restaurante mateos plaza martin', 'mateos-burgers-tegucigalpa',
- 'Hamburguesas artesanales recomendadas en la comunidad de Reddit (r/Honduras) junto con Matambritas como una de las mejores opciones de hamburguesa en la capital.',
+ 'Hamburguesas artesanales de carne jugosa a precios accesibles.',
  'Plaza Martín, Res. Plaza, Tegucigalpa',
  ST_SetSRID(ST_MakePoint(-87.1845798, 14.0654502), 4326)::geography,
- NULL, 'LOW', 7.00, 14.00, 'USD', 'CONFIRMED', 'CONFIRMED', 'COMMUNITY_VERIFIED',
- '["★ 4.7 (48 reseñas)","🍔 Reddit r/Honduras","Hamburguesa artesanal","Precios razonables"]'::jsonb, TRUE),
+ NULL, 'LOW', 150.00, 260.00, 'HNL', 'CONFIRMED', 'CONFIRMED', 'COMMUNITY_VERIFIED',
+ '["4.7 ★ (48 reseñas)","Hamburguesa artesanal","Reddit r/Honduras"]'::jsonb, TRUE),
+
 
 -- Comida en San Pedro Sula
 ('77777777-7777-7777-7777-777777777804', '33333333-3333-3333-3333-333333333314',
@@ -388,6 +390,7 @@ ON CONFLICT (slug) DO UPDATE SET
   price_tier = EXCLUDED.price_tier,
   avg_price_min = EXCLUDED.avg_price_min,
   avg_price_max = EXCLUDED.avg_price_max,
+  currency_code = EXCLUDED.currency_code,
   tags = EXCLUDED.tags,
   is_demo_data = EXCLUDED.is_demo_data;
 
@@ -468,76 +471,77 @@ ON CONFLICT (content_hash) DO UPDATE SET
   extracted_snippet = EXCLUDED.extracted_snippet,
   is_demo_data = EXCLUDED.is_demo_data;
 
--- 9. Scores Consolidados (Orden exacto #1 a #13 en Tegucigalpa, <= 91.35) ------
+-- 9. Scores Consolidados (Orden exacto #1 a #13 en Tegucigalpa) ---------------
 INSERT INTO place_scores (
     place_id, overall_score, confidence_level, total_independent_evidences,
     total_native_reviews, source_diversity_count, ai_explanation_es,
     explanation_status, top_positive_aspects, top_negative_aspects
 ) VALUES
 -- #1 El Morito – La Hacienda
-('77777777-7777-7777-7777-777777777821', 91.35, 'HIGH', 6, 14204, 3,
- 'Lo elegiría para: una buena comida en pareja o familia. • Respaldo: 4.8 ★ (14,204 reseñas) y guía Qué Plan Tegus; el mayor volumen de opiniones verificadas cerca de Florencia Norte.',
- 'CONFIRMED', '["14,204 reseñas (4.8 ★)","Ceviches y pulpo al ajillo","Destacado en Qué Plan Tegus","Ideal en pareja o familia"]'::jsonb, '["Alta concurrencia en hora de almuerzo de fin de semana"]'::jsonb),
+('77777777-7777-7777-7777-777777777821', 94.00, 'HIGH', 6, 14261, 3,
+ 'Mariscos frescos, ceviches y pulpo al ajillo. La mejor opción gastronómica general en Tegucigalpa.',
+ 'CONFIRMED', '["14,261 reseñas (4.8 ★)","Ceviches y pulpo al ajillo","Qué Plan Tegus"]'::jsonb, '["Alta concurrencia fines de semana"]'::jsonb),
 
 -- #2 Restaurante Portobello
-('77777777-7777-7777-7777-777777777822', 91.20, 'HIGH', 4, 11, 2,
- 'Lo elegiría para: pizza o pasta de buena calidad y una salida tranquila. • Respaldo: 4.4 ★ por su estilo italiano acogedor, mejillones y sangría a pocos metros de Florencia Norte.',
- 'CONFIRMED', '["Pizza y pasta italiana","Ambiente acogedor y tranquilo","Mejillones y sangría","Muy cerca de Florencia Norte"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777822', 88.00, 'HIGH', 4, 772, 2,
+ 'Pizza artesanal al horno y pasta fresca en un ambiente acogedor y tranquilo.',
+ 'CONFIRMED', '["Pizza artesanal","Pastas frescas y sangría","Ambiente tranquilo"]'::jsonb, '[]'::jsonb),
 
 -- #3 La Pana
-('77777777-7777-7777-7777-777777777823', 91.05, 'HIGH', 4, 35, 3,
- 'Lo elegiría para: comer italiano sin ir necesariamente a un restaurante de lujo. • Respaldo: 5.0 ★ y destacado en Qué Plan Tegus por sus porciones generosas y excelente relación precio-cantidad.',
- 'CONFIRMED', '["Excelente relación cantidad-precio","Porciones generosas","Lasañas, pizzas y pastas","Destacado en Qué Plan Tegus"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777823', 91.00, 'HIGH', 4, 251, 3,
+ 'Cocina italiana abundante y la mejor relación cantidad-precio en la zona.',
+ 'CONFIRMED', '["Excelente relación precio-cantidad","Lasañas y pastas generosas","Qué Plan Tegus"]'::jsonb, '[]'::jsonb),
 
 -- #4 Alto Grano Café
-('77777777-7777-7777-7777-777777777824', 90.90, 'HIGH', 4, 68, 3,
- 'Lo elegiría para: desayunar, brunch o tomar café con algo de comer. • Respaldo: 4.8 ★ (68 reseñas) y guía Qué Plan Tegus; destacan sus tostadas de aguacate y sándwich de cerdo ahumado.',
- 'CONFIRMED', '["Café de especialidad (4.8 ★)","Tostadas de aguacate y cerdo ahumado","Excelente ambiente y atención","Qué Plan Tegus"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777824', 89.00, 'HIGH', 4, 72, 3,
+ 'Café de especialidad hondureño, tostadas de aguacate y brunch delicioso.',
+ 'CONFIRMED', '["Café de especialidad (4.8 ★)","Brunch y tostadas","Atención de primera"]'::jsonb, '[]'::jsonb),
 
 -- #5 Tacos Tado
-('77777777-7777-7777-7777-777777777825', 90.75, 'HIGH', 4, 585, 2,
- 'Lo elegiría para: comer algo informal sin gastar demasiado (L100–200 por persona). | ⚠️ Ojo: hay críticas sobre mantenimiento del local y consistencia.',
- 'CONFIRMED', '["Precios accesibles (L100–200/persona)","Tacos, nachos y chilaquiles","A pasos de Florencia Norte"]'::jsonb, '["Críticas sobre mantenimiento del local","Consistencia variable en horas pico"]'::jsonb),
+('77777777-7777-7777-7777-777777777825', 78.00, 'HIGH', 4, 585, 2,
+ 'Tacos y nachos accesibles (L 100–200 por persona) para comer rápido.',
+ 'CONFIRMED', '["Precios accesibles (L 100–200)","Tacos y chilaquiles"]'::jsonb, '["Mantenimiento del local mejorable"]'::jsonb),
 
 -- #6 T.G.I. Fridays – Multiplaza
-('77777777-7777-7777-7777-777777777826', 90.60, 'HIGH', 4, 807, 2,
- 'Lo elegiría para: salir con amigos y compartir varios platos. | ⚠️ Ojo: hay críticas por precios elevados y lentitud del servicio.',
- 'CONFIRMED', '["807 reseñas (4.1 ★)","Ideal para grupos y amigos","Entradas, costillas y cócteles"]'::jsonb, '["Críticas por precios elevados","Lentitud del servicio cuando se llena"]'::jsonb),
+('77777777-7777-7777-7777-777777777826', 77.00, 'HIGH', 4, 807, 2,
+ 'Hamburguesas, costillas BBQ y entradas para compartir en grupos.',
+ 'CONFIRMED', '["Ideal para grupos y amigos","Costillas y cócteles"]'::jsonb, '["Precios elevados y servicio lento en horas pico"]'::jsonb),
 
 -- #7 Matambritas – Gourmet Center
-('77777777-7777-7777-7777-777777777827', 90.45, 'HIGH', 5, 863, 3,
- 'Lo elegiría para: cuando tengas ganas de una hamburguesa contundente. • Respaldo: 4.3 ★ (863 reseñas) y recomendación directa en conversaciones de Reddit (r/Honduras).',
- 'CONFIRMED', '["Recomendado en Reddit r/Honduras","863 reseñas (4.3 ★)","Hamburguesas grandes y especiales"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777827', 88.00, 'HIGH', 5, 864, 3,
+ 'Hamburguesas grandes al carbón muy recomendadas por la comunidad en Reddit r/Honduras.',
+ 'CONFIRMED', '["Favorito de Reddit r/Honduras","Hamburguesas al carbón contundentes"]'::jsonb, '[]'::jsonb),
 
 -- #8 Pizza House – Palmira
-('77777777-7777-7777-7777-777777777828', 90.30, 'HIGH', 4, 1016, 2,
- 'Lo elegiría para: una salida de pizza con amigos o familia. • Respaldo: 4.5 ★ (1,016 reseñas); se mencionan especialmente la pizza Carnívora y su masa.',
- 'CONFIRMED', '["1,016 reseñas (4.5 ★)","Pizza Carnívora destacada","Masa artesanal"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777828', 86.00, 'HIGH', 4, 1021, 2,
+ 'Pizzas artesanales crujientes y comida italiana tradicional en Colonia Palmira.',
+ 'CONFIRMED', '["1,021 reseñas (4.5 ★)","Pizza Carnívora destacada"]'::jsonb, '[]'::jsonb),
 
 -- #9 Café Honoré
-('77777777-7777-7777-7777-777777777829', 90.15, 'HIGH', 4, 774, 2,
- 'Lo elegiría para: una comida más tranquila, con variedad y opciones diferentes. • Respaldo: 4.4 ★ (774 reseñas) por sus ceviches, tablas de quesos, deli y postres.',
- 'CONFIRMED', '["774 reseñas (4.4 ★)","Deli, quesos, embutidos y ceviches","Ambiente tranquilo en Las Minitas"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777829', 85.00, 'HIGH', 4, 775, 2,
+ 'Deli gourmet con tablas de quesos, ceviches finos y repostería europea.',
+ 'CONFIRMED', '["Deli gourmet y tablas de quesos","Comida tranquila en Las Minitas"]'::jsonb, '[]'::jsonb),
 
 -- #10 Usami
-('77777777-7777-7777-7777-777777777830', 90.00, 'HIGH', 3, 15, 2,
- 'Lo elegiría para: comer japonés (sushi, ramen y tempura) y variar de hamburguesas, pizzas y comida tradicional cerca de Florencia Norte (4.5 ★).',
- 'CONFIRMED', '["Sushi, ramen y tempura (4.5 ★)","Propuesta diferente en la zona","A 560 m de Florencia Norte"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777830', 83.00, 'HIGH', 3, 1039, 2,
+ 'Sushi fresco, ramen tradicional y tempura en Lomas del Guijarro.',
+ 'CONFIRMED', '["Sushi fresco y ramen caliente","Variedad japonesa"]'::jsonb, '[]'::jsonb),
 
 -- #11 Tatos Wings & Grill
-('77777777-7777-7777-7777-777777777831', 89.80, 'HIGH', 3, 210, 2,
- 'Lo elegiría para: comer alitas con amigos. • Respaldo: destacado directamente en Reddit (r/Honduras) como la recomendación #1 en alitas de Tegucigalpa.',
- 'CONFIRMED', '["Favorito de Reddit r/Honduras en alitas","Variedad de salsas","Buena relación calidad-precio"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777831', 87.00, 'HIGH', 3, 737, 2,
+ 'Alitas y boneless con salsas de la casa, referente #1 de alitas en Reddit r/Honduras.',
+ 'CONFIRMED', '["Recomendación #1 en alitas en Reddit","Salsas caseras"]'::jsonb, '[]'::jsonb),
 
 -- #12 Charlie's Burgers & Wings
-('77777777-7777-7777-7777-777777777832', 89.60, 'HIGH', 3, 180, 2,
- 'Lo elegiría para: hamburguesas y alitas con buen sabor casero. • Respaldo: destacado en la guía gastronómica local Qué Plan Tegus.',
- 'CONFIRMED', '["Destacado en Qué Plan Tegus","Hamburguesas y alitas","Cerca de Florencia Norte"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777832', 80.00, 'HIGH', 3, 74, 2,
+ 'Smash burgers artesanales y alitas destacadas en Qué Plan Tegus.',
+ 'CONFIRMED', '["Smash burgers sabrosas","Qué Plan Tegus"]'::jsonb, '[]'::jsonb),
 
 -- #13 Mateos Burgers
-('77777777-7777-7777-7777-777777777833', 89.40, 'HIGH', 3, 145, 2,
- 'Lo elegiría para: hamburguesa artesanal a buen precio. • Respaldo: mencionado en Reddit (r/Honduras) junto con Matambritas entre las mejores hamburguesas.',
- 'CONFIRMED', '["Recomendado en Reddit r/Honduras","Hamburguesas artesanales","Precios razonables"]'::jsonb, '[]'::jsonb),
+('77777777-7777-7777-7777-777777777833', 86.00, 'HIGH', 3, 48, 2,
+ 'Hamburguesas artesanales de carne jugosa recomendadas en Reddit r/Honduras.',
+ 'CONFIRMED', '["Hamburguesas artesanales jugosas","Precios razonables"]'::jsonb, '[]'::jsonb),
+
 
 -- Resto de categorías en Tegucigalpa y Honduras
 ('77777777-7777-7777-7777-777777777804', 89.10, 'MEDIUM', 2, 1, 2,

@@ -33,47 +33,15 @@ const MapView = dynamic(() => import('../components/MapView'), {
 /** Coordenadas por defecto en Honduras: Colonia Florencia Norte, Tegucigalpa. */
 const DEFAULT_HONDURAS_COORDS: Coordinates = { lat: 14.0885, lng: -87.1815 };
 
-const QUICK_CRAVING_PICKS = [
-  {
-    craving: '🏆 Mejor experiencia general',
-    placeLabel: 'El Morito',
-    slug: 'el-morito-la-hacienda-tegucigalpa',
-  },
-  {
-    craving: '🍕 Pizza y pasta',
-    placeLabel: 'Portobello',
-    slug: 'restaurante-portobello-tegucigalpa',
-  },
-  {
-    craving: '💰 Relación cantidad-precio',
-    placeLabel: 'La Pana',
-    slug: 'la-pana-tegucigalpa',
-  },
-  {
-    craving: '🍔 Hamburguesas',
-    placeLabel: 'Matambritas',
-    slug: 'matambritas-gourmet-center-tegucigalpa',
-  },
-  {
-    craving: '🍗 Alitas (Reddit)',
-    placeLabel: 'Tatos Wings',
-    slug: 'tatos-wings-tegucigalpa',
-  },
-  {
-    craving: '🌮 Algo económico',
-    placeLabel: 'Tacos Tado',
-    slug: 'tacos-tado-tegucigalpa',
-  },
-  {
-    craving: '🍣 Sushi y japonés',
-    placeLabel: 'Usami',
-    slug: 'usami-sushi-tegucigalpa',
-  },
-  {
-    craving: '☕ Desayuno o brunch',
-    placeLabel: 'Alto Grano',
-    slug: 'alto-grano-cafe-tegucigalpa',
-  },
+const CRAVING_FILTERS = [
+  { id: 'TODOS', label: 'Todos' },
+  { id: 'MARISCOS', label: 'Mariscos & Ceviches' },
+  { id: 'PIZZA', label: 'Pizza & Pasta' },
+  { id: 'HAMBURGUESAS', label: 'Hamburguesas' },
+  { id: 'ALITAS', label: 'Alitas' },
+  { id: 'CAFE', label: 'Café & Brunch' },
+  { id: 'TACOS', label: 'Tacos' },
+  { id: 'SUSHI', label: 'Sushi & Ramen' },
 ] as const;
 
 const CATEGORY_VISUALS: Record<
@@ -158,6 +126,7 @@ export default function ExploroHomePage(): React.JSX.Element {
   const [filterValues, setFilterValues] = useState<FilterValues>(INITIAL_FILTERS);
   const [categorySlug, setCategorySlug] = useState('');
   const [subcategorySlug, setSubcategorySlug] = useState('');
+  const [selectedCraving, setSelectedCraving] = useState<string>('TODOS');
 
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showSurpriseModal, setShowSurpriseModal] = useState(false);
@@ -258,6 +227,66 @@ export default function ExploroHomePage(): React.JSX.Element {
     session.authKey
   );
 
+  const handleRequestGps = useCallback(() => {
+    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+      setGpsStatus('Localizando con GPS…');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setFilterValues((prev) => ({
+            ...prev,
+            coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+            citySlug: '',
+            radiusKm: DEFAULT_RADIUS_KM,
+            unbounded: false,
+          }));
+          setGpsStatus('Mi ubicación actual (GPS)');
+        },
+        () => {
+          setGpsStatus('Tegucigalpa (5 km)');
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+  }, []);
+
+  const displayedPlaces = useMemo(() => {
+    if (selectedCraving === 'TODOS') return discovery.places;
+    return discovery.places.filter((p) => {
+      const text = `${p.name} ${p.tags.join(' ')} ${p.description ?? ''} ${p.recommendationReason}`.toLowerCase();
+      switch (selectedCraving) {
+        case 'MARISCOS':
+          return text.includes('marisco') || text.includes('ceviche') || p.slug.includes('morito');
+        case 'PIZZA':
+          return (
+            text.includes('pizza') ||
+            text.includes('pasta') ||
+            p.slug.includes('portobello') ||
+            p.slug.includes('pana') ||
+            p.slug.includes('pizza-house')
+          );
+        case 'HAMBURGUESAS':
+          return (
+            text.includes('hamburguesa') ||
+            text.includes('burger') ||
+            p.slug.includes('matambritas') ||
+            p.slug.includes('fridays') ||
+            p.slug.includes('mateo') ||
+            p.slug.includes('charlie')
+          );
+        case 'ALITAS':
+          return text.includes('alita') || text.includes('wing') || p.slug.includes('tato') || p.slug.includes('charlie');
+        case 'CAFE':
+          return text.includes('café') || text.includes('cafe') || text.includes('brunch') || p.slug.includes('grano') || p.slug.includes('honore');
+        case 'TACOS':
+          return text.includes('taco') || text.includes('chilaquil') || text.includes('nacho') || p.slug.includes('tado');
+        case 'SUSHI':
+          return text.includes('sushi') || text.includes('ramen') || text.includes('japones') || text.includes('japonés') || p.slug.includes('usami');
+        default:
+          return true;
+      }
+    });
+  }, [discovery.places, selectedCraving]);
+
   const handleSelectMode = (mode: ExplorationMode): void => {
     const access = canAccessMode(mode, localModeEnabled);
     if (!access.allowed) {
@@ -272,6 +301,7 @@ export default function ExploroHomePage(): React.JSX.Element {
   const handleSelectCategoryCard = (cat: CategoryDTO): void => {
     setCategorySlug(cat.slug);
     setSubcategorySlug('');
+    setSelectedCraving('TODOS');
     // Garantizar que al entrar al mapa siempre inicie con Recomendados y radio de 5 km a la redonda
     setFilterValues((prev) => ({
       ...prev,
@@ -352,12 +382,6 @@ export default function ExploroHomePage(): React.JSX.Element {
     bg: 'rgba(56, 189, 248, 0.16)',
     shortDesc: '',
   };
-
-  const isNearTegucigalpa =
-    filterValues.citySlug === 'tegucigalpa' ||
-    (filterValues.coords !== null &&
-      Math.abs(filterValues.coords.lat - DEFAULT_HONDURAS_COORDS.lat) < 0.08 &&
-      Math.abs(filterValues.coords.lng - DEFAULT_HONDURAS_COORDS.lng) < 0.08);
 
   return (
     <div style={{ minHeight: '100dvh', padding: '0.9rem 1.15rem 2.5rem' }}>
@@ -787,7 +811,7 @@ export default function ExploroHomePage(): React.JSX.Element {
               </div>
             </div>
 
-            {/* Accesos rápidos de ubicación en el mapa (Honduras y EE. UU.) */}
+            {/* Selector de ciudad o ubicación */}
             <div
               style={{
                 display: 'flex',
@@ -797,17 +821,33 @@ export default function ExploroHomePage(): React.JSX.Element {
                 paddingBottom: '.2rem',
               }}
             >
+              <button
+                type="button"
+                className="chip"
+                onClick={handleRequestGps}
+                style={{
+                  fontSize: '.76rem',
+                  padding: '.28rem .7rem',
+                  background: '#ecfdf5',
+                  color: '#059669',
+                  borderColor: '#a7f3d0',
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                📍 Usar mi GPS
+              </button>
               <span style={{ fontSize: '.76rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                Punto de referencia (5 km):
+                o ciudad:
               </span>
               {[
-                { label: '🇭🇳 Col. Florencia Norte (Tegucigalpa)', slug: 'tegucigalpa', coords: { lat: 14.0885, lng: -87.1815 } },
-                { label: '🇭🇳 San Pedro Sula', slug: 'san-pedro-sula', coords: { lat: 15.5042, lng: -88.025 } },
-                { label: '🇭🇳 Roatán', slug: 'roatan', coords: { lat: 16.2753, lng: -86.5986 } },
-                { label: '🇭🇳 Copán Ruinas', slug: 'copan-ruinas', coords: { lat: 14.84, lng: -89.1419 } },
-                { label: '🇺🇸 New York', slug: 'new-york', coords: { lat: 40.7128, lng: -74.006 } },
-                { label: '🇺🇸 Miami', slug: 'miami', coords: { lat: 25.7617, lng: -80.1918 } },
-                { label: '🇺🇸 Austin', slug: 'austin', coords: { lat: 30.2672, lng: -97.7431 } },
+                { label: 'Tegucigalpa', slug: 'tegucigalpa', coords: { lat: 14.0885, lng: -87.1815 } },
+                { label: 'San Pedro Sula', slug: 'san-pedro-sula', coords: { lat: 15.5042, lng: -88.025 } },
+                { label: 'Roatán', slug: 'roatan', coords: { lat: 16.2753, lng: -86.5986 } },
+                { label: 'Copán Ruinas', slug: 'copan-ruinas', coords: { lat: 14.84, lng: -89.1419 } },
+                { label: 'Miami', slug: 'miami', coords: { lat: 25.7617, lng: -80.1918 } },
+                { label: 'New York', slug: 'new-york', coords: { lat: 40.7128, lng: -74.006 } },
+                { label: 'Austin', slug: 'austin', coords: { lat: 30.2672, lng: -97.7431 } },
               ].map((hub) => {
                 const isCurrent =
                   filterValues.citySlug === hub.slug ||
@@ -828,7 +868,8 @@ export default function ExploroHomePage(): React.JSX.Element {
                         radiusKm: DEFAULT_RADIUS_KM,
                         unbounded: false,
                       }));
-                      setGpsStatus(`${hub.label} (5 km)`);
+                      setGpsStatus(`${hub.label} (${DEFAULT_RADIUS_KM} km)`);
+                      setSelectedCraving('TODOS');
                     }}
                   >
                     {hub.label}
@@ -837,65 +878,44 @@ export default function ExploroHomePage(): React.JSX.Element {
               })}
             </div>
 
-            {/* Selección rápida según lo que tengas ganas de comer (Tegucigalpa - Florencia Norte) */}
-            {categorySlug === 'comida' && isNearTegucigalpa && (
+            {/* Filtros de antojo para Comida (filtran la lista y el mapa en tiempo real) */}
+            {categorySlug === 'comida' && (
               <div
-                className="card"
                 style={{
-                  padding: '1rem 1.15rem',
-                  background: '#ffffff',
-                  borderColor: '#ebebeb',
-                  display: 'grid',
-                  gap: '.65rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '.45rem',
+                  overflowX: 'auto',
+                  padding: '.3rem 0 .5rem',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.4rem' }}>
-                  <div style={{ fontWeight: 800, fontSize: '.94rem', color: '#222222' }}>
-                    🎯 Selección rápida según lo que tengas ganas de comer (Radio 5 km · Col. Florencia Norte)
-                  </div>
-                  <span style={{ fontSize: '.76rem', color: '#717171', fontWeight: 600 }}>
-                    Puntaje combinado: Google Maps (45%) + Reddit r/Honduras (30%) + Redes Sociales y Qué Plan Tegus (25%)
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
-                    gap: '.5rem',
-                  }}
-                >
-                  {QUICK_CRAVING_PICKS.map((pick) => {
-                    const active = highlightSlug === pick.slug;
-                    return (
-                      <button
-                        key={pick.slug}
-                        type="button"
-                        onClick={() => focusPlace(pick.slug)}
-                        style={{
-                          textAlign: 'left',
-                          padding: '.55rem .75rem',
-                          borderRadius: 12,
-                          background: active ? '#ecfdf5' : '#f8fafc',
-                          border: active
-                            ? '2px solid #10B981'
-                            : '1.5px solid #e2e8f0',
-                          borderBottomWidth: 3,
-                          color: '#0f172a',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div style={{ fontSize: '.72rem', color: '#64748b', fontWeight: 600 }}>
-                          {pick.craving}
-                        </div>
-                        <div style={{ fontSize: '.86rem', fontWeight: 800, color: '#10B981' }}>
-                          → {pick.placeLabel}
-                        </div>
-                      </button>
-
-                    );
-                  })}
-                </div>
+                <span style={{ fontSize: '.8rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>
+                  Filtrar:
+                </span>
+                {CRAVING_FILTERS.map((f) => {
+                  const active = selectedCraving === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setSelectedCraving(f.id)}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 999,
+                        fontSize: '.82rem',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        border: active ? '2px solid #10b981' : '1px solid #e2e8f0',
+                        background: active ? '#ecfdf5' : '#ffffff',
+                        color: active ? '#059669' : '#334155',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -973,7 +993,7 @@ export default function ExploroHomePage(): React.JSX.Element {
             {/* Mapa primero + Tarjetas de resultados */}
             <div className="layout-split with-map">
               <MapView
-                places={discovery.places}
+                places={displayedPlaces}
                 userLocation={filterValues.coords}
                 fallbackCenter={mapCenter}
                 activeRoute={activeRoute}
@@ -995,10 +1015,14 @@ export default function ExploroHomePage(): React.JSX.Element {
                     <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
                       {discovery.loading
                         ? 'Buscando en el mapa…'
-                        : `${discovery.total} lugar(es) recomendado(s) en ${filterValues.unbounded ? 'todo el catálogo' : `${filterValues.radiusKm} km a la redonda`}`}
+                        : `${displayedPlaces.length} lugar(es) recomendado(s) ${
+                            selectedCraving !== 'TODOS'
+                              ? `(${CRAVING_FILTERS.find((c) => c.id === selectedCraving)?.label ?? ''})`
+                              : `en ${filterValues.unbounded ? 'todo el catálogo' : `${filterValues.radiusKm} km a la redonda`}`
+                          }`}
                     </h2>
                     <div style={{ fontSize: '.76rem', color: 'var(--text-secondary)' }}>
-                      Ordenados por cercanía, reputación, sabor y recomendaciones reales • Usa 🚗 Waze o 🗺️ Google Maps para ir directo.
+                      Ordenados por reputación, sabor y cercanía real • Waze o Google Maps para ir directo.
                     </div>
                   </div>
                   {discovery.personalizationApplied && (
@@ -1011,38 +1035,24 @@ export default function ExploroHomePage(): React.JSX.Element {
                   )}
                 </div>
 
-                {!discovery.loading && !discovery.error && discovery.places.length === 0 ? (
+                {!discovery.loading && !discovery.error && displayedPlaces.length === 0 ? (
                   <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)', marginBottom: '.85rem' }}>
-                      No encontramos lugares de esta categoría a menos de {filterValues.radiusKm} km de este punto.
+                      No encontramos lugares para este filtro en {filterValues.radiusKm} km.
                     </p>
                     <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() =>
-                          patchFilters({
-                            coords: DEFAULT_HONDURAS_COORDS,
-                            citySlug: '',
-                            radiusKm: DEFAULT_RADIUS_KM,
-                            unbounded: false,
-                          })
-                        }
+                        onClick={() => setSelectedCraving('TODOS')}
                       >
-                        🇭🇳 Ver cerca de Col. Florencia Norte (5 km)
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => patchFilters({ unbounded: true })}
-                      >
-                        🌎 Ver sin límite de distancia
+                        Ver todos los recomendados
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="places-grid">
-                    {discovery.places.map((place, index) => (
+                    {displayedPlaces.map((place, index) => (
                       <div key={place.id} id={`place-${place.slug}`}>
                         <PlaceCard
                           place={place}

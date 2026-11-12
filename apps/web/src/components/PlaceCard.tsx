@@ -5,6 +5,7 @@ import { ExploroApiClient } from '@exploro/api-client';
 import { CollectionDTO, Coordinates, PlaceCardDTO } from '@exploro/shared-types';
 import {
   computeMultiSourceScore,
+  formatCleanPrice,
   formatDistanceKm,
   getPlacePhotoGallery,
   parseRecommendationReason,
@@ -27,11 +28,12 @@ interface Props {
 
 function formatPriceRange(place: PlaceCardDTO): string {
   if (place.priceStatus !== 'CONFIRMED') return 'Consultar precio';
-  if (place.priceTier === 'FREE') return 'Gratis';
-  if (place.avgPriceMin !== null && place.avgPriceMax !== null) {
-    return `$${place.avgPriceMin}–$${place.avgPriceMax} ${place.currencyCode}`;
-  }
-  return place.priceTier;
+  return formatCleanPrice(
+    place.avgPriceMin,
+    place.avgPriceMax,
+    place.currencyCode,
+    place.priceTier
+  );
 }
 
 export function PlaceCard({
@@ -103,7 +105,7 @@ export function PlaceCard({
             {rank !== undefined && (
               <span
                 style={{
-                  background: rank === 1 ? '#f59e0b' : 'rgba(255, 255, 255, 0.95)',
+                  background: rank === 1 ? '#10b981' : 'rgba(255, 255, 255, 0.95)',
                   color: rank === 1 ? '#ffffff' : '#222222',
                   padding: '4px 10px',
                   borderRadius: 999,
@@ -112,7 +114,7 @@ export function PlaceCard({
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                 }}
               >
-                {rank === 1 ? '🏆 #1 Favorito' : `#${rank}`}
+                {rank === 1 ? '#1 Top' : `#${rank}`}
               </span>
             )}
 
@@ -177,12 +179,12 @@ export function PlaceCard({
                 boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
               }}
             >
-              📍 A {distanceLabel}
+              A {distanceLabel}
             </div>
           )}
         </div>
 
-        {/* Cuerpo editorial limpio estilo Airbnb + Píldoras de puntaje Duolingo */}
+        {/* Cuerpo editorial limpio estilo Airbnb + Píldoras de puntaje */}
         <div style={{ padding: '1rem 1.1rem 1.15rem', display: 'grid', gap: '.55rem', flex: 1 }}>
           {/* Fila 1: Título + Estrellas Maps */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '.5rem' }}>
@@ -221,7 +223,7 @@ export function PlaceCard({
                 border: '1px solid #bae6fd',
               }}
             >
-              📍 Maps {score.mapsPoints}/45
+              Maps {score.mapsPoints}/45
             </span>
             <span
               style={{
@@ -234,7 +236,7 @@ export function PlaceCard({
                 border: '1px solid #fed7aa',
               }}
             >
-              💬 Reddit {score.redditPoints}/30
+              Reddit {score.redditPoints}/30
             </span>
             <span
               style={{
@@ -247,7 +249,7 @@ export function PlaceCard({
                 border: '1px solid #bbf7d0',
               }}
             >
-              📱 Redes {score.socialPoints}/25
+              Redes {score.socialPoints}/25
             </span>
           </div>
 
@@ -263,10 +265,10 @@ export function PlaceCard({
               lineHeight: 1.38,
             }}
           >
-            <strong>💡 {parsedReason.choiceReason}</strong>
+            <strong>{parsedReason.choiceReason}</strong>
             {parsedReason.caveat && (
               <div style={{ color: '#b45309', fontSize: '.76rem', marginTop: 4, fontWeight: 700 }}>
-                ⚠️ {parsedReason.caveat}
+                {parsedReason.caveat}
               </div>
             )}
           </div>
