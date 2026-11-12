@@ -1,4 +1,5 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { GooglePlacesLiveService } from './google-places-live.service';
 import {
   resolveSafeRecommendationReason,
   tiersAboveBudget,
@@ -102,7 +103,10 @@ const UUID_RE =
 export class CatalogService {
   constructor(
     @Inject(DatabaseService) private readonly db: DatabaseService,
-    @Inject(RedisService) private readonly redis: RedisService
+    @Inject(RedisService) private readonly redis: RedisService,
+    @Optional()
+    @Inject(GooglePlacesLiveService)
+    private readonly googlePlacesLive?: GooglePlacesLiveService
   ) {}
 
   public async getCategories(): Promise<CategoryDTO[]> {
@@ -316,9 +320,28 @@ export class CatalogService {
       params
     );
 
+    let finalRows = res.rows;
+    if (hasCoords && finalRows.length < 8 && this.googlePlacesLive) {
+      const newlyIndexed = await this.googlePlacesLive.ensureAreaPopulated(
+        query,
+        finalRows.length
+      );
+      if (newlyIndexed > 0) {
+        const rerunRes = await this.db.query<CardRow>(
+          `SELECT ${CARD_COLUMNS}, ${distanceSelect}, COUNT(*) OVER() AS total_count
+           ${CARD_FROM}
+           WHERE ${conditions.join(' AND ')}
+           ORDER BY ${orderBy}
+           LIMIT $${params.length - 1} OFFSET $${params.length}`,
+          params
+        );
+        finalRows = rerunRes.rows;
+      }
+    }
+
     return {
-      places: res.rows.map((row) => this.mapCard(row)),
-      total: res.rows[0]?.total_count ? Number(res.rows[0].total_count) : 0,
+      places: finalRows.map((row) => this.mapCard(row)),
+      total: finalRows[0]?.total_count ? Number(finalRows[0].total_count) : 0,
       personalizationApplied,
       sortApplied,
     };

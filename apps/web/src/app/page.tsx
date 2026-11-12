@@ -276,11 +276,19 @@ export default function ExploroHomePage(): React.JSX.Element {
       const text = `${p.name} ${p.tags.join(' ')} ${p.description ?? ''} ${p.recommendationReason}`.toLowerCase();
       switch (selectedCraving) {
         case 'MARISCOS':
-          return text.includes('marisco') || text.includes('ceviche') || p.slug.includes('morito');
+          return (
+            text.includes('marisco') ||
+            text.includes('ceviche') ||
+            text.includes('seafood') ||
+            text.includes('fish') ||
+            text.includes('pescad') ||
+            p.slug.includes('morito')
+          );
         case 'PIZZA':
           return (
             text.includes('pizza') ||
             text.includes('pasta') ||
+            text.includes('italian') ||
             p.slug.includes('portobello') ||
             p.slug.includes('pana') ||
             p.slug.includes('pizza-house')
@@ -289,19 +297,47 @@ export default function ExploroHomePage(): React.JSX.Element {
           return (
             text.includes('hamburguesa') ||
             text.includes('burger') ||
+            text.includes('steak') ||
             p.slug.includes('matambritas') ||
             p.slug.includes('fridays') ||
             p.slug.includes('mateo') ||
             p.slug.includes('charlie')
           );
         case 'ALITAS':
-          return text.includes('alita') || text.includes('wing') || p.slug.includes('tato') || p.slug.includes('charlie');
+          return (
+            text.includes('alita') ||
+            text.includes('wing') ||
+            text.includes('chicken') ||
+            p.slug.includes('tato') ||
+            p.slug.includes('charlie')
+          );
         case 'CAFE':
-          return text.includes('café') || text.includes('cafe') || text.includes('brunch') || p.slug.includes('grano') || p.slug.includes('honore');
+          return (
+            text.includes('café') ||
+            text.includes('cafe') ||
+            text.includes('coffee') ||
+            text.includes('bakery') ||
+            text.includes('brunch') ||
+            p.slug.includes('grano') ||
+            p.slug.includes('honore')
+          );
         case 'TACOS':
-          return text.includes('taco') || text.includes('chilaquil') || text.includes('nacho') || p.slug.includes('tado');
+          return (
+            text.includes('taco') ||
+            text.includes('chilaquil') ||
+            text.includes('nacho') ||
+            text.includes('mexican') ||
+            p.slug.includes('tado')
+          );
         case 'SUSHI':
-          return text.includes('sushi') || text.includes('ramen') || text.includes('japones') || text.includes('japonés') || p.slug.includes('usami');
+          return (
+            text.includes('sushi') ||
+            text.includes('ramen') ||
+            text.includes('japones') ||
+            text.includes('japonés') ||
+            text.includes('japanese') ||
+            p.slug.includes('usami')
+          );
         default:
           return true;
       }

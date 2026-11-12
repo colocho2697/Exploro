@@ -483,12 +483,12 @@ INSERT INTO place_scores (
  'CONFIRMED', '["14,261 reseñas (4.8 ★)","Ceviches y pulpo al ajillo","Qué Plan Tegus"]'::jsonb, '["Alta concurrencia fines de semana"]'::jsonb),
 
 -- #2 Restaurante Portobello
-('77777777-7777-7777-7777-777777777822', 88.00, 'HIGH', 4, 772, 2,
+('77777777-7777-7777-7777-777777777822', 92.00, 'HIGH', 4, 772, 2,
  'Pizza artesanal al horno y pasta fresca en un ambiente acogedor y tranquilo.',
  'CONFIRMED', '["Pizza artesanal","Pastas frescas y sangría","Ambiente tranquilo"]'::jsonb, '[]'::jsonb),
 
 -- #3 La Pana
-('77777777-7777-7777-7777-777777777823', 91.00, 'HIGH', 4, 251, 3,
+('77777777-7777-7777-7777-777777777823', 90.00, 'HIGH', 4, 251, 3,
  'Cocina italiana abundante y la mejor relación cantidad-precio en la zona.',
  'CONFIRMED', '["Excelente relación precio-cantidad","Lasañas y pastas generosas","Qué Plan Tegus"]'::jsonb, '[]'::jsonb),
 

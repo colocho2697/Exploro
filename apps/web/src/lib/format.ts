@@ -48,6 +48,7 @@ export interface NavigationOptions {
   name?: string;
   addressText?: string | null;
   cityName?: string | null;
+  countryName?: string | null;
   origin?: string | null;
 }
 
@@ -55,11 +56,21 @@ export interface NavigationOptions {
 export function buildWazeUrl(
   lat: number,
   lng: number,
-  options?: { name?: string; cityName?: string }
+  options?: { name?: string; cityName?: string; countryName?: string }
 ): string {
   if (options?.name) {
     const cleanName = options.name.replace(/^#?\d+[\.\s\-—]+/, '').trim();
-    const query = `${cleanName} ${options.cityName ?? 'Tegucigalpa'}, Honduras`;
+    const parts = [cleanName];
+    if (options.cityName) parts.push(options.cityName);
+    if (options.countryName) {
+      parts.push(options.countryName);
+    } else if (
+      options.cityName?.toLowerCase().includes('tegucigalpa') ||
+      options.cityName?.toLowerCase().includes('pedro sula')
+    ) {
+      parts.push('Honduras');
+    }
+    const query = parts.join(', ');
     return `https://waze.com/ul?q=${encodeURIComponent(query)}&ll=${lat},${lng}&navigate=yes`;
   }
   return `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
@@ -76,7 +87,15 @@ export function buildGoogleMapsUrl(
     const destinationParts = [cleanName];
     if (options.addressText) destinationParts.push(options.addressText);
     if (options.cityName) destinationParts.push(options.cityName);
-    destinationParts.push('Honduras');
+    if (options.countryName) {
+      destinationParts.push(options.countryName);
+    } else if (
+      options.cityName?.toLowerCase().includes('tegucigalpa') ||
+      options.cityName?.toLowerCase().includes('pedro sula') ||
+      options.origin?.toLowerCase().includes('honduras')
+    ) {
+      destinationParts.push('Honduras');
+    }
     const destinationQuery = destinationParts.join(', ');
 
     if (options.origin) {
@@ -479,12 +498,35 @@ const GOOGLE_PLACES_API_KEY =
 
 /**
  * Obtiene la galería con información de verificación real y atribución de autor.
- * - Si existen fotos reales en Google Places API, usa las oficiales con su autor.
+ * - Si existen fotos reales en Google Places API (dinámicas en tags o estáticas), usa las oficiales con su autor.
  * - Si es una foto de catálogo ilustrativa, lo marca honestamente como no verificada.
  */
 export function getPlacePhotoDetails(
-  place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'>
+  place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'> & { tags?: string[] }
 ): PlacePhotoInfo[] {
+  // 1. Fotos oficiales de Google Places registradas dinámicamente en tags
+  const gpTag = place.tags?.find((t) => typeof t === 'string' && t.startsWith('gp_photos:'));
+  if (gpTag) {
+    try {
+      const list = JSON.parse(gpTag.slice('gp_photos:'.length)) as Array<{
+        photoName: string;
+        authorName: string;
+        authorUri: string | null;
+      }>;
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((gp) => ({
+          url: `https://places.googleapis.com/v1/${gp.photoName}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_PLACES_API_KEY}`,
+          authorName: gp.authorName || 'Google Maps',
+          authorUri: gp.authorUri || null,
+          isVerifiedReal: true,
+        }));
+      }
+    } catch {
+      // Continuar al siguiente método si hay error de parseo
+    }
+  }
+
+  // 2. Fotos mapeadas en catálogo pre-indexado
   const gPhotos = GOOGLE_PLACES_PHOTOS[place.slug];
   if (gPhotos && gPhotos.length > 0) {
     return gPhotos.map((gp) => ({
@@ -495,6 +537,19 @@ export function getPlacePhotoDetails(
     }));
   }
 
+  // 3. Si tiene una URL directa de Google Places API en imageUrl
+  if (place.imageUrl && place.imageUrl.includes('places.googleapis.com')) {
+    return [
+      {
+        url: place.imageUrl,
+        authorName: 'Google Maps',
+        authorUri: null,
+        isVerifiedReal: true,
+      },
+    ];
+  }
+
+  // 4. Galerías personalizadas por slug
   const custom = SLUG_GALLERIES[place.slug];
   if (custom && custom.length > 0) {
     return custom.map((url) => ({
@@ -505,6 +560,7 @@ export function getPlacePhotoDetails(
     }));
   }
 
+  // 5. Fallback ilustrativo
   const fallback =
     CATEGORY_DEFAULT_GALLERIES[place.categorySlug] ??
     CATEGORY_DEFAULT_GALLERIES.comida!;
@@ -518,7 +574,7 @@ export function getPlacePhotoDetails(
 }
 
 export function getPlacePhotoGallery(
-  place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'>
+  place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'> & { tags?: string[] }
 ): string[] {
   return getPlacePhotoDetails(place).map((p) => p.url);
 }

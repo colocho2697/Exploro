@@ -14,6 +14,7 @@ import { HealthController } from './modules/health/health.controller';
 import { AuthService } from './modules/auth/auth.service';
 import { AuthController } from './modules/auth/auth.controller';
 import { CatalogService } from './modules/catalog/catalog.service';
+import { GooglePlacesLiveService } from './modules/catalog/google-places-live.service';
 import { CatalogController } from './modules/catalog/catalog.controller';
 import { LibraryService } from './modules/library/library.service';
 import { LibraryController } from './modules/library/library.controller';
@@ -92,6 +93,7 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     RedisService,
     AuthService,
     CatalogService,
+    GooglePlacesLiveService,
     LibraryService,
     GeoService,
     SourcesService,

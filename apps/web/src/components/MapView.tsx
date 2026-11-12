@@ -22,6 +22,11 @@ interface Props {
 
 const US_CENTER: Coordinates = { lat: 39.5, lng: -98.35 };
 
+const GOOGLE_PLACES_API_KEY =
+  (typeof process !== 'undefined' &&
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) ||
+  'AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U';
+
 const CATEGORY_COLORS: Record<string, string> = {
   comida: '#f97316',
   turismo: '#0ea5e9',
@@ -80,9 +85,65 @@ export default function MapView({
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [isPinMode, setIsPinMode] = useState(true);
+  const [searchCityQuery, setSearchCityQuery] = useState('');
+  const [searchingCity, setSearchingCity] = useState(false);
 
   const onSelectCoordinatesRef = useRef(onSelectCoordinates);
   onSelectCoordinatesRef.current = onSelectCoordinates;
+
+  const handleGlobalSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = searchCityQuery.trim();
+    if (!query || searchingCity) return;
+    setSearchingCity(true);
+    try {
+      const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+        },
+        body: JSON.stringify({
+          textQuery: query,
+          maxResultCount: 1,
+          languageCode: 'es',
+        }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          places?: Array<{
+            location?: { latitude: number; longitude: number };
+            displayName?: { text: string };
+            formattedAddress?: string;
+          }>;
+        };
+        const p = data.places?.[0];
+        if (
+          p?.location?.latitude !== undefined &&
+          p?.location?.longitude !== undefined
+        ) {
+          const coords: Coordinates = {
+            lat: p.location.latitude,
+            lng: p.location.longitude,
+          };
+          if (mapRef.current) {
+            mapRef.current.flyTo({
+              center: [coords.lng, coords.lat],
+              zoom: 12,
+              duration: 800,
+            });
+          }
+          onSelectCoordinatesRef.current?.(coords);
+          setSearchCityQuery('');
+        }
+      }
+    } catch (err) {
+      console.error('Error buscando destino:', err);
+    } finally {
+      setSearchingCity(false);
+    }
+  };
 
   useEffect(() => {
     if (!container.current || mapRef.current) return;
@@ -126,6 +187,10 @@ export default function MapView({
 
     const handleMapClick = (e: maplibregl.MapMouseEvent) => {
       if (!isPinMode || !onSelectCoordinatesRef.current) return;
+      const target = e.originalEvent?.target as HTMLElement | null;
+      if (target?.closest('.maplibregl-marker') || target?.closest('.maplibregl-popup')) {
+        return;
+      }
       onSelectCoordinatesRef.current({ lat: e.lngLat.lat, lng: e.lngLat.lng });
     };
 
@@ -155,6 +220,9 @@ export default function MapView({
           [centerPoint.lng, centerPoint.lat],
           radiusKm
         );
+        for (const pt of circleData.geometry.coordinates[0] ?? []) {
+          bounds.extend(pt);
+        }
         const source = map.getSource('search-radius-src') as maplibregl.GeoJSONSource | undefined;
         if (source) {
           source.setData(circleData as any);
@@ -403,6 +471,65 @@ export default function MapView({
             </button>
           )}
         </div>
+
+        {/* BUSCADOR MUNDIAL DE CIUDADES O DESTINOS */}
+        <form
+          onSubmit={handleGlobalSearch}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            flex: '1 1 230px',
+            maxWidth: 360,
+          }}
+        >
+          <div style={{ position: 'relative', width: '100%' }}>
+            <input
+              type="text"
+              value={searchCityQuery}
+              onChange={(e) => setSearchCityQuery(e.target.value)}
+              placeholder="🌎 Ciudad mundial (ej. Dallas, Madrid, Tokio...)"
+              style={{
+                width: '100%',
+                padding: '5px 10px 5px 28px',
+                fontSize: '.76rem',
+                borderRadius: 999,
+                border: '1.5px solid #cbd5e1',
+                outline: 'none',
+                background: '#f8fafc',
+              }}
+            />
+            <span
+              style={{
+                position: 'absolute',
+                left: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '.74rem',
+                pointerEvents: 'none',
+              }}
+            >
+              🔍
+            </span>
+          </div>
+          <button
+            type="submit"
+            disabled={searchingCity || !searchCityQuery.trim()}
+            style={{
+              padding: '5px 11px',
+              borderRadius: 999,
+              fontSize: '.76rem',
+              fontWeight: 800,
+              background: '#0f172a',
+              color: '#ffffff',
+              border: 'none',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {searchingCity ? 'Buscando…' : 'Ir'}
+          </button>
+        </form>
 
         {/* SELECTOR DE RADIO EN KILÓMETROS ESTILO MARKETPLACE */}
         {onRadiusChange && (
