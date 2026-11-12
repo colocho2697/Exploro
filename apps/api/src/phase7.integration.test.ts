@@ -22,6 +22,7 @@ describe('Fase 7 — Módulo de Administración, Control y Auditoría Inmutable'
   let samplePlaceId: string;
   let sampleReviewId: string;
   let sampleEvidenceId: string;
+  let originalSamplePlaceLoc: string | null = null;
 
   beforeAll(async () => {
     app = await NestFactory.create(AppModule, { logger: false });
@@ -89,11 +90,12 @@ describe('Fase 7 — Módulo de Administración, Control y Auditoría Inmutable'
       getAccessToken: () => adminLogin.tokens.accessToken,
     });
 
-    // 4. Obtener un lugar y una evidencia de prueba
-    const placeRes = await db.query<{ id: string }>(
-      `SELECT id FROM places LIMIT 1`
+    // 4. Obtener un lugar y una evidencia de prueba (excluyendo lugares con aserciones GPS críticas en otras pruebas)
+    const placeRes = await db.query<{ id: string; loc: string }>(
+      `SELECT id, ST_AsText(location) as loc FROM places WHERE slug NOT IN ('l-industrie-pizzeria-nyc', 'franklin-barbecue-austin', 'barton-springs-austin') LIMIT 1`
     );
     samplePlaceId = placeRes.rows[0]!.id;
+    originalSamplePlaceLoc = placeRes.rows[0]!.loc;
 
     const evidenceRes = await db.query<{ id: string }>(
       `SELECT id FROM evidences LIMIT 1`
@@ -112,6 +114,12 @@ describe('Fase 7 — Módulo de Administración, Control y Auditoría Inmutable'
   });
 
   afterAll(async () => {
+    if (originalSamplePlaceLoc && samplePlaceId) {
+      await db?.query(
+        `UPDATE places SET location = ST_GeogFromText($1) WHERE id = $2`,
+        [originalSamplePlaceLoc, samplePlaceId]
+      );
+    }
     await db?.query(
       `UPDATE feature_flags SET enabled = false WHERE key = 'trip_planner_enabled'`
     );

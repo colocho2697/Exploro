@@ -1276,7 +1276,7 @@ export function detectReorganizationImpact(params: {
   let currentEndMinutes = (newH ?? 10) * 60 + (newM ?? 0) + newDurationMinutes;
 
   const shiftedItems: ShiftedItemProposal[] = [];
-  let overflows = false;
+  let overflows = currentEndMinutes > 23 * 60 + 30;
 
   for (let i = modIdx + 1; i < currentItems.length; i++) {
     const item = currentItems[i]!;
@@ -1295,7 +1295,7 @@ export function detectReorganizationImpact(params: {
       const propEndH = Math.floor(propEndMinutes / 60);
       const propEndM = propEndMinutes % 60;
 
-      if (propEndH >= 23 && propEndM > 30) {
+      if (propEndMinutes > 23 * 60 + 30) {
         overflows = true;
       }
 
