@@ -125,7 +125,7 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
                           color: '#38bdf8',
                         }}
                       >
-                        GPS Activo • 8 mi
+                        GPS Activo • 5 km
                       </span>
                     )}
                   </div>

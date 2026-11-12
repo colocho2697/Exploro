@@ -22,7 +22,7 @@ import { AdminControlPanel } from '../components/AdminControlPanel';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { useLibrary } from '../hooks/useLibrary';
 import { useSession } from '../hooks/useSession';
-import { DEFAULT_RADIUS_MILES, milesToKm } from '../lib/format';
+import { DEFAULT_RADIUS_KM } from '../lib/format';
 
 // MapLibre requiere WebGL/DOM: se carga solo en el navegador.
 const MapView = dynamic(() => import('../components/MapView'), {
@@ -30,8 +30,51 @@ const MapView = dynamic(() => import('../components/MapView'), {
   loading: () => <div className="map-box" aria-busy="true" />,
 });
 
-/** Coordenadas por defecto en Honduras (Tegucigalpa) mientras el GPS del dispositivo resuelve. */
-const DEFAULT_HONDURAS_COORDS: Coordinates = { lat: 14.0818, lng: -87.2068 };
+/** Coordenadas por defecto en Honduras: Colonia Florencia Norte, Tegucigalpa. */
+const DEFAULT_HONDURAS_COORDS: Coordinates = { lat: 14.0885, lng: -87.1815 };
+
+const QUICK_CRAVING_PICKS = [
+  {
+    craving: '🏆 Mejor experiencia general',
+    placeLabel: 'El Morito',
+    slug: 'el-morito-la-hacienda-tegucigalpa',
+  },
+  {
+    craving: '🍕 Pizza y pasta',
+    placeLabel: 'Portobello',
+    slug: 'restaurante-portobello-tegucigalpa',
+  },
+  {
+    craving: '💰 Relación cantidad-precio',
+    placeLabel: 'La Pana',
+    slug: 'la-pana-tegucigalpa',
+  },
+  {
+    craving: '🍔 Hamburguesas',
+    placeLabel: 'Matambritas',
+    slug: 'matambritas-gourmet-center-tegucigalpa',
+  },
+  {
+    craving: '🍗 Alitas (Reddit)',
+    placeLabel: 'Tatos Wings',
+    slug: 'tatos-wings-tegucigalpa',
+  },
+  {
+    craving: '🌮 Algo económico',
+    placeLabel: 'Tacos Tado',
+    slug: 'tacos-tado-tegucigalpa',
+  },
+  {
+    craving: '🍣 Sushi y japonés',
+    placeLabel: 'Usami',
+    slug: 'usami-sushi-tegucigalpa',
+  },
+  {
+    craving: '☕ Desayuno o brunch',
+    placeLabel: 'Alto Grano',
+    slug: 'alto-grano-cafe-tegucigalpa',
+  },
+] as const;
 
 const CATEGORY_VISUALS: Record<
   string,
@@ -41,7 +84,7 @@ const CATEGORY_VISUALS: Record<
     emoji: '🍕',
     accent: '#f97316',
     bg: 'rgba(249, 115, 22, 0.16)',
-    shortDesc: 'Pizzerías, comida típica catracha, asados y cafés',
+    shortDesc: 'Mariscos, pizzerías, hamburguesas, sushi, cafés y alitas (Top verificados)',
   },
   turismo: {
     emoji: '🧭',
@@ -53,25 +96,25 @@ const CATEGORY_VISUALS: Record<
     emoji: '🎭',
     accent: '#a855f7',
     bg: 'rgba(168, 85, 247, 0.16)',
-    shortDesc: 'Teatro, música en vivo, comedia y vida nocturna',
+    shortDesc: 'Teatro, cines VIP, música en vivo y vida nocturna',
   },
   actividades: {
     emoji: '🛶',
     accent: '#10b981',
     bg: 'rgba(16, 185, 129, 0.16)',
-    shortDesc: 'Senderismo en pinares, snorkel y aire libre',
+    shortDesc: 'Senderismo en pinares, caminatas ecológicas y aire libre',
   },
   eventos: {
     emoji: '🎪',
     accent: '#eab308',
     bg: 'rgba(234, 179, 8, 0.16)',
-    shortDesc: 'Ferias gastronómicas, conciertos y cultura',
+    shortDesc: 'Ferias gastronómicas, conciertos y agenda cultural',
   },
   compras: {
     emoji: '🛍️',
     accent: '#ec4899',
     bg: 'rgba(236, 72, 153, 0.16)',
-    shortDesc: 'Artesanías lencas, mercados y café de altura',
+    shortDesc: 'Centros comerciales, artesanías lencas y café de especialidad',
   },
 };
 
@@ -91,7 +134,7 @@ const INITIAL_FILTERS: FilterValues = {
   citySlug: '',
   searchQuery: '',
   sortBy: 'recommended',
-  radiusMiles: DEFAULT_RADIUS_MILES, // 8 millas por defecto
+  radiusKm: DEFAULT_RADIUS_KM, // 5 km a la redonda por defecto
   unbounded: false,
   coords: DEFAULT_HONDURAS_COORDS,
 };
@@ -109,7 +152,7 @@ export default function ExploroHomePage(): React.JSX.Element {
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [cities, setCities] = useState<CityDTO[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<string>('Detectando tu ubicación…');
+  const [gpsStatus, setGpsStatus] = useState<string>('Col. Florencia Norte, Tegucigalpa (5 km)');
 
   const [filterValues, setFilterValues] = useState<FilterValues>(INITIAL_FILTERS);
   const [categorySlug, setCategorySlug] = useState('');
@@ -123,7 +166,6 @@ export default function ExploroHomePage(): React.JSX.Element {
   const [showAdmin, setShowAdmin] = useState(false);
   const [highlightSlug, setHighlightSlug] = useState<string | null>(null);
 
-  // Fase 3: Ruteo y cálculo de distancias sin costo
   const [activeRoute, setActiveRoute] = useState<RouteSummary | null>(null);
   const [routeTargetName, setRouteTargetName] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -161,19 +203,19 @@ export default function ExploroHomePage(): React.JSX.Element {
           setFilterValues((prev) => ({
             ...prev,
             coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-            radiusMiles: DEFAULT_RADIUS_MILES,
+            radiusKm: DEFAULT_RADIUS_KM,
             unbounded: false,
             sortBy: 'recommended',
           }));
-          setGpsStatus('Ubicación GPS activa');
+          setGpsStatus('Ubicación GPS activa (5 km)');
         },
         () => {
-          setGpsStatus('Ubicación activa: Tegucigalpa, HN');
+          setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
         },
         { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
       );
     } else {
-      setGpsStatus('Ubicación activa: Tegucigalpa, HN');
+      setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
     }
   }, [session.client]);
 
@@ -193,7 +235,7 @@ export default function ExploroHomePage(): React.JSX.Element {
       subcategorySlug,
       searchQuery: filterValues.searchQuery,
       sortBy: filterValues.sortBy,
-      radiusKm: milesToKm(filterValues.radiusMiles),
+      radiusKm: filterValues.radiusKm,
       unbounded: filterValues.unbounded,
       coords: filterValues.coords,
       applyPreferences: true,
@@ -223,11 +265,11 @@ export default function ExploroHomePage(): React.JSX.Element {
   const handleSelectCategoryCard = (cat: CategoryDTO): void => {
     setCategorySlug(cat.slug);
     setSubcategorySlug('');
-    // Garantizar que al entrar al mapa siempre inicie con Recomendados y radio de 8 millas
+    // Garantizar que al entrar al mapa siempre inicie con Recomendados y radio de 5 km a la redonda
     setFilterValues((prev) => ({
       ...prev,
       sortBy: 'recommended',
-      radiusMiles: DEFAULT_RADIUS_MILES,
+      radiusKm: DEFAULT_RADIUS_KM,
       unbounded: false,
       searchQuery: '',
     }));
@@ -303,6 +345,12 @@ export default function ExploroHomePage(): React.JSX.Element {
     bg: 'rgba(56, 189, 248, 0.16)',
     shortDesc: '',
   };
+
+  const isNearTegucigalpa =
+    filterValues.citySlug === 'tegucigalpa' ||
+    (filterValues.coords !== null &&
+      Math.abs(filterValues.coords.lat - DEFAULT_HONDURAS_COORDS.lat) < 0.08 &&
+      Math.abs(filterValues.coords.lng - DEFAULT_HONDURAS_COORDS.lng) < 0.08);
 
   return (
     <div style={{ minHeight: '100dvh', padding: '0.9rem 1.15rem 2.5rem' }}>
@@ -497,14 +545,14 @@ export default function ExploroHomePage(): React.JSX.Element {
                     border: '1px solid rgba(56, 189, 248, 0.3)',
                   }}
                 >
-                  ⭐ Recomendados por defecto • Radio 8 millas
+                  ⭐ Recomendados por defecto • Radio 5 km a la redonda
                 </span>
               </div>
               <h2 style={{ fontSize: 'clamp(1.45rem, 3.5vw, 2rem)', fontWeight: 800 }}>
                 ¿Qué te apetece descubrir cerca de ti?
               </h2>
               <p style={{ color: 'var(--text-secondary)', fontSize: '.9rem', marginTop: '.25rem' }}>
-                Toca una tarjeta para ver en el mapa los lugares recomendados hasta a 8 millas de tu ubicación.
+                Toca una tarjeta para ver en el mapa los mejores lugares verificados dentro de 5 km a la redonda.
               </p>
             </div>
 
@@ -609,7 +657,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                 ¿Qué tipo de {activeCategory.name.toLowerCase()} buscas hoy?
               </h2>
               <p style={{ color: 'var(--text-secondary)', fontSize: '.88rem', marginTop: '.2rem' }}>
-                Te mostraremos los recomendados en el mapa dentro de un radio de 8 millas.
+                Te mostraremos los recomendados en el mapa dentro de un radio de 5 km a la redonda.
               </p>
             </div>
 
@@ -630,7 +678,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                     Ver todo {activeCategory.name}
                   </div>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '.78rem' }}>
-                    Todos los lugares recomendados a menos de 8 millas
+                    Todos los lugares recomendados a menos de 5 km
                   </div>
                 </div>
               </button>
@@ -650,7 +698,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                       {sub.name}
                     </div>
                     <div style={{ color: 'var(--text-secondary)', fontSize: '.78rem' }}>
-                      Ver en el mapa (hasta 8 mi) →
+                      Ver en el mapa (hasta 5 km) →
                     </div>
                   </div>
                 </button>
@@ -660,7 +708,7 @@ export default function ExploroHomePage(): React.JSX.Element {
         )}
 
         {/* ===================================================================
-            PASO 3: VISTA DE MAPA Y RECOMENDADOS (RADIO 8 MI POR DEFECTO)
+            PASO 3: VISTA DE MAPA Y RECOMENDADOS (RADIO 5 KM POR DEFECTO)
             Aquí y solo aquí se habilita aplicar otros filtros o «Sorpréndeme»
            =================================================================== */}
         {wizardStep === 'MAP' && (
@@ -701,7 +749,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                 <span className="chip">
                   {filterValues.unbounded
                     ? '🌎 Sin límite de radio'
-                    : `📍 Hasta ${filterValues.radiusMiles} millas`}
+                    : `📍 Radio ${filterValues.radiusKm} km a la redonda`}
                 </span>
 
                 <span className="chip">
@@ -743,10 +791,10 @@ export default function ExploroHomePage(): React.JSX.Element {
               }}
             >
               <span style={{ fontSize: '.76rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                Ubicación en mapa (8 mi):
+                Punto de referencia (5 km):
               </span>
               {[
-                { label: '🇭🇳 Tegucigalpa', slug: 'tegucigalpa', coords: { lat: 14.0818, lng: -87.2068 } },
+                { label: '🇭🇳 Col. Florencia Norte (Tegucigalpa)', slug: 'tegucigalpa', coords: { lat: 14.0885, lng: -87.1815 } },
                 { label: '🇭🇳 San Pedro Sula', slug: 'san-pedro-sula', coords: { lat: 15.5042, lng: -88.025 } },
                 { label: '🇭🇳 Roatán', slug: 'roatan', coords: { lat: 16.2753, lng: -86.5986 } },
                 { label: '🇭🇳 Copán Ruinas', slug: 'copan-ruinas', coords: { lat: 14.84, lng: -89.1419 } },
@@ -758,7 +806,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                   filterValues.citySlug === hub.slug ||
                   (!filterValues.citySlug &&
                     filterValues.coords &&
-                    Math.abs(filterValues.coords.lat - hub.coords.lat) < 0.05);
+                    Math.abs(filterValues.coords.lat - hub.coords.lat) < 0.04);
                 return (
                   <button
                     key={hub.slug}
@@ -770,10 +818,10 @@ export default function ExploroHomePage(): React.JSX.Element {
                         ...prev,
                         citySlug: '',
                         coords: hub.coords,
-                        radiusMiles: DEFAULT_RADIUS_MILES,
+                        radiusKm: DEFAULT_RADIUS_KM,
                         unbounded: false,
                       }));
-                      setGpsStatus(hub.label);
+                      setGpsStatus(`${hub.label} (5 km)`);
                     }}
                   >
                     {hub.label}
@@ -781,6 +829,67 @@ export default function ExploroHomePage(): React.JSX.Element {
                 );
               })}
             </div>
+
+            {/* Selección rápida según lo que tengas ganas de comer (Tegucigalpa - Florencia Norte) */}
+            {categorySlug === 'comida' && isNearTegucigalpa && (
+              <div
+                className="card"
+                style={{
+                  padding: '.85rem 1rem',
+                  background:
+                    'linear-gradient(145deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.9) 100%)',
+                  borderColor: 'rgba(249, 115, 22, 0.35)',
+                  display: 'grid',
+                  gap: '.6rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.4rem' }}>
+                  <div style={{ fontWeight: 800, fontSize: '.9rem', color: '#f8fafc' }}>
+                    🎯 Selección rápida según lo que tengas ganas de comer (Radio 5 km • Col. Florencia Norte)
+                  </div>
+                  <span style={{ fontSize: '.74rem', color: '#94a3b8' }}>
+                    Combinando reseñas verificadas, Reddit (r/Honduras), Qué Plan Tegus y relación calidad-precio
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
+                    gap: '.45rem',
+                  }}
+                >
+                  {QUICK_CRAVING_PICKS.map((pick) => {
+                    const active = highlightSlug === pick.slug;
+                    return (
+                      <button
+                        key={pick.slug}
+                        type="button"
+                        onClick={() => focusPlace(pick.slug)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '.48rem .68rem',
+                          borderRadius: 10,
+                          background: active
+                            ? 'rgba(249, 115, 22, 0.22)'
+                            : 'rgba(15, 23, 42, 0.75)',
+                          border: active
+                            ? '1px solid #f97316'
+                            : '1px solid rgba(148, 163, 184, 0.22)',
+                          color: '#f8fafc',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontSize: '.72rem', color: '#94a3b8' }}>{pick.craving}</div>
+                        <div style={{ fontSize: '.84rem', fontWeight: 800, color: '#fb923c' }}>
+                          → {pick.placeLabel}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Panel de filtros (solo visible cuando el usuario lo abre en el Paso 3) */}
             {showFiltersPanel && (
@@ -802,9 +911,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                 client={session.client}
                 coords={filterValues.coords}
                 citySlug={filterValues.citySlug}
-                radiusKm={
-                  filterValues.unbounded ? 500 : milesToKm(filterValues.radiusMiles)
-                }
+                radiusKm={filterValues.unbounded ? 500 : filterValues.radiusKm}
                 applyPreferences
               />
             )}
@@ -822,7 +929,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                 <div>
                   <strong>🚗 Ruta a {routeTargetName}: </strong>
                   <span>
-                    {activeRoute.distanceMiles} mi ({Math.round(activeRoute.distanceMeters / 1000)} km) • ~
+                    {(activeRoute.distanceMeters / 1000).toFixed(1)} km • ~
                     {activeRoute.durationMinutes} min
                   </span>
                 </div>
@@ -876,11 +983,16 @@ export default function ExploroHomePage(): React.JSX.Element {
                     gap: '.5rem',
                   }}
                 >
-                  <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
-                    {discovery.loading
-                      ? 'Buscando en el mapa…'
-                      : `${discovery.total} lugar(es) recomendado(s)`}
-                  </h2>
+                  <div>
+                    <h2 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+                      {discovery.loading
+                        ? 'Buscando en el mapa…'
+                        : `${discovery.total} lugar(es) recomendado(s) en ${filterValues.unbounded ? 'todo el catálogo' : `${filterValues.radiusKm} km a la redonda`}`}
+                    </h2>
+                    <div style={{ fontSize: '.76rem', color: 'var(--text-secondary)' }}>
+                      Ordenados por cercanía, reputación, sabor y recomendaciones reales • Usa 🚗 Waze o 🗺️ Google Maps para ir directo.
+                    </div>
+                  </div>
                   {discovery.personalizationApplied && (
                     <span
                       className="badge"
@@ -894,7 +1006,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                 {!discovery.loading && !discovery.error && discovery.places.length === 0 ? (
                   <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)', marginBottom: '.85rem' }}>
-                      No encontramos lugares de esta categoría a menos de {filterValues.radiusMiles} millas de este punto.
+                      No encontramos lugares de esta categoría a menos de {filterValues.radiusKm} km de este punto.
                     </p>
                     <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button
@@ -904,12 +1016,12 @@ export default function ExploroHomePage(): React.JSX.Element {
                           patchFilters({
                             coords: DEFAULT_HONDURAS_COORDS,
                             citySlug: '',
-                            radiusMiles: DEFAULT_RADIUS_MILES,
+                            radiusKm: DEFAULT_RADIUS_KM,
                             unbounded: false,
                           })
                         }
                       >
-                        🇭🇳 Ver en Tegucigalpa (8 mi)
+                        🇭🇳 Ver cerca de Col. Florencia Norte (5 km)
                       </button>
                       <button
                         type="button"
@@ -922,10 +1034,11 @@ export default function ExploroHomePage(): React.JSX.Element {
                   </div>
                 ) : (
                   <div className="places-grid">
-                    {discovery.places.map((place) => (
+                    {discovery.places.map((place, index) => (
                       <div key={place.id} id={`place-${place.slug}`}>
                         <PlaceCard
                           place={place}
+                          rank={index + 1}
                           client={session.client}
                           isFavorite={library.favoriteIds.has(place.id)}
                           isLoggedIn={Boolean(session.user)}

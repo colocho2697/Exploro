@@ -8,6 +8,7 @@ import {
   PlaceRecommendationSummary,
   UserReviewDTO,
 } from '@exploro/shared-types';
+import { buildGoogleMapsUrl, buildWazeUrl } from '../lib/format';
 
 const TIME_OF_DAY: Record<string, string> = {
   MORNING: 'mañana',
@@ -27,7 +28,7 @@ const SOURCE_LABELS: Record<string, string> = {
 export function PlaceDetail({
   client,
   slug,
-  onCalculateRoute,
+  onCalculateRoute: _onCalculateRoute,
 }: {
   client: ExploroApiClient;
   slug: string;
@@ -191,23 +192,57 @@ export function PlaceDetail({
 
   return (
     <div style={{ display: 'grid', gap: '.8rem', fontSize: '.85rem' }}>
-      {/* Botones principales de acción */}
-      <div style={{ display: 'grid', gridTemplateColumns: onCalculateRoute ? '1fr 1fr' : '1fr', gap: '.5rem' }}>
-        {onCalculateRoute && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() =>
-              onCalculateRoute(
-                { lat: detail.coordinates.lat, lng: detail.coordinates.lng },
-                detail.name
-              )
-            }
-            style={{ width: '100%', justifyContent: 'center', fontSize: '.8rem' }}
-          >
-            🗺️ Trazar ruta ($0)
-          </button>
-        )}
+      {/* Botones principales de navegación directa (Waze / Google Maps) y actividad */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: '.5rem',
+        }}
+      >
+        <a
+          href={buildWazeUrl(detail.coordinates.lat, detail.coordinates.lng)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn"
+          style={{
+            width: '100%',
+            justifyContent: 'center',
+            fontSize: '.8rem',
+            fontWeight: 700,
+            background: 'rgba(56, 189, 248, 0.16)',
+            borderColor: 'rgba(56, 189, 248, 0.45)',
+            color: '#38bdf8',
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '.35rem',
+          }}
+        >
+          🚗 Abrir en Waze
+        </a>
+
+        <a
+          href={buildGoogleMapsUrl(detail.coordinates.lat, detail.coordinates.lng)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn"
+          style={{
+            width: '100%',
+            justifyContent: 'center',
+            fontSize: '.8rem',
+            fontWeight: 700,
+            background: 'rgba(16, 185, 129, 0.15)',
+            borderColor: 'rgba(16, 185, 129, 0.45)',
+            color: '#34d399',
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '.35rem',
+          }}
+        >
+          🗺️ Abrir en Google Maps
+        </a>
 
         {!activeActivity ? (
           <button
@@ -216,7 +251,7 @@ export function PlaceDetail({
             onClick={handleStartActivity}
             style={{ width: '100%', justifyContent: 'center', fontSize: '.8rem' }}
           >
-            🚀 Comenzar actividad
+            🚀 Registrar visita
           </button>
         ) : (
           <button

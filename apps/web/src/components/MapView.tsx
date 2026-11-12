@@ -5,6 +5,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Coordinates, PlaceCardDTO, RouteSummary } from '@exploro/shared-types';
 import { MAP_STYLE_URL } from '../lib/api';
+import { buildGoogleMapsUrl, buildWazeUrl } from '../lib/format';
 
 interface Props {
   places: PlaceCardDTO[];
@@ -76,18 +77,30 @@ export default function MapView({
     markersRef.current = [];
     const bounds = new maplibregl.LngLatBounds();
 
-    for (const place of places) {
+    for (let idx = 0; idx < places.length; idx++) {
+      const place = places[idx]!;
+      const rankNum = idx + 1;
       const color = CATEGORY_COLORS[place.categorySlug] ?? '#0ea5e9';
       const el = document.createElement('button');
       el.type = 'button';
       el.setAttribute('aria-label', `Ver ${place.name}`);
-      el.style.cssText = `width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:${color};cursor:pointer;padding:0;box-shadow:0 2px 4px rgba(0,0,0,0.3);`;
+      el.textContent = String(rankNum);
+      el.style.cssText = `width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:${color};color:#fff;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;box-shadow:0 2px 6px rgba(0,0,0,0.45);`;
       el.addEventListener('click', () => onSelectPlace(place.slug));
+      const wazeUrl = buildWazeUrl(place.coordinates.lat, place.coordinates.lng);
+      const gmapsUrl = buildGoogleMapsUrl(place.coordinates.lat, place.coordinates.lng);
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([place.coordinates.lng, place.coordinates.lat])
         .setPopup(
           new maplibregl.Popup({ offset: 14 }).setHTML(
-            `<strong>${place.name}</strong><br/><small>${place.categoryName} • ${place.cityName}</small>`
+            `<div style="color:#0f172a;font-size:12px;line-height:1.35">
+              <strong>#${rankNum} ${place.name}</strong><br/>
+              <small>${place.addressText ?? place.cityName}</small>
+              <div style="margin-top:6px;display:flex;gap:6px">
+                <a href="${wazeUrl}" target="_blank" rel="noopener noreferrer" style="background:#0284c7;color:#fff;padding:3px 7px;border-radius:5px;text-decoration:none;font-weight:700;font-size:11px">🚗 Waze</a>
+                <a href="${gmapsUrl}" target="_blank" rel="noopener noreferrer" style="background:#059669;color:#fff;padding:3px 7px;border-radius:5px;text-decoration:none;font-weight:700;font-size:11px">🗺️ Maps</a>
+              </div>
+            </div>`
           )
         )
         .addTo(map);

@@ -2,10 +2,11 @@ export const KM_PER_MILE = 1.609344;
 export const METERS_PER_MILE = 1609.344;
 export const FEET_PER_METER = 3.28084;
 
-export const DEFAULT_RADIUS_MILES = 8;
+export const DEFAULT_RADIUS_KM = 5;
+export const DEFAULT_RADIUS_MILES = 3.1;
 
 export const HONDURAS_CITIES = [
-  { label: 'Tegucigalpa, HN', value: 'Tegucigalpa', slug: 'tegucigalpa', lat: 14.0818, lng: -87.2068 },
+  { label: 'Col. Florencia Norte (Tegucigalpa), HN', value: 'Tegucigalpa', slug: 'tegucigalpa', lat: 14.0885, lng: -87.1815 },
   { label: 'San Pedro Sula, HN', value: 'San Pedro Sula', slug: 'san-pedro-sula', lat: 15.5042, lng: -88.025 },
   { label: 'Roatán, HN', value: 'Roatán', slug: 'roatan', lat: 16.2753, lng: -86.5986 },
   { label: 'Copán Ruinas, HN', value: 'Copán Ruinas', slug: 'copan-ruinas', lat: 14.84, lng: -89.1419 },
@@ -29,6 +30,17 @@ export function milesToKm(miles: number): number {
   return Number((miles * KM_PER_MILE).toFixed(3));
 }
 
+export function formatDistanceKm(meters: number | null | undefined): string | null {
+  if (meters === null || meters === undefined || Number.isNaN(meters) || meters < 0) {
+    return null;
+  }
+  if (meters < 1000) {
+    return `${Math.round(meters)} m`;
+  }
+  const km = meters / 1000;
+  return `${km.toFixed(km < 10 ? 1 : 0)} km`;
+}
+
 /** Formateador de distancia para mercado EE. UU. */
 export function formatDistanceUS(meters: number | null | undefined): string | null {
   if (meters === null || meters === undefined || Number.isNaN(meters) || meters < 0) {
@@ -39,4 +51,12 @@ export function formatDistanceUS(meters: number | null | undefined): string | nu
     return `${Math.round(meters * FEET_PER_METER)} ft`;
   }
   return `${miles.toFixed(miles < 10 ? 1 : 0)} mi`;
+}
+
+export function buildWazeUrl(lat: number, lng: number): string {
+  return `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+}
+
+export function buildGoogleMapsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
 }

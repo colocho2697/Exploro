@@ -8,13 +8,13 @@ import {
   Coordinates,
   PlaceSortBy,
 } from '@exploro/shared-types';
-import { DEFAULT_RADIUS_MILES, RADIUS_OPTIONS_MI } from '../lib/format';
+import { DEFAULT_RADIUS_KM, RADIUS_OPTIONS_KM } from '../lib/format';
 
 export interface FilterValues {
   citySlug: string;
   searchQuery: string;
   sortBy: PlaceSortBy;
-  radiusMiles: number;
+  radiusKm: number;
   unbounded: boolean;
   coords: Coordinates | null;
 }
@@ -32,14 +32,14 @@ interface Props {
 }
 
 const SORT_LABELS: Record<PlaceSortBy, string> = {
-  recommended: '⭐ Recomendados (Por defecto)',
+  recommended: '⭐ Recomendados (Ranking combinado)',
   distance: '📍 Más cercanos',
   name: '🔤 Nombre (A–Z)',
 };
 
 function geolocationMessage(error: GeolocationPositionError): string {
   if (error.code === error.PERMISSION_DENIED) {
-    return 'Permiso de GPS denegado. Usando ubicación de referencia en el mapa.';
+    return 'Permiso de GPS denegado. Usando Colonia Florencia Norte, Tegucigalpa como punto de referencia.';
   }
   if (error.code === error.TIMEOUT) {
     return 'El GPS tardó demasiado. Inténtalo de nuevo o cambia la zona en el mapa.';
@@ -105,7 +105,7 @@ export function FiltersBar({
         onChange({
           coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
           citySlug: '',
-          radiusMiles: DEFAULT_RADIUS_MILES,
+          radiusKm: DEFAULT_RADIUS_KM,
           unbounded: false,
           sortBy: 'recommended',
         });
@@ -127,7 +127,7 @@ export function FiltersBar({
     onChange({
       citySlug: slug,
       coords: found ? found.center : values.coords,
-      radiusMiles: values.radiusMiles || DEFAULT_RADIUS_MILES,
+      radiusKm: values.radiusKm || DEFAULT_RADIUS_KM,
       unbounded: false,
     });
   };
@@ -142,7 +142,7 @@ export function FiltersBar({
         citySlug: matchedCity?.slug ?? '',
         searchQuery: '',
         coords: sug.coordinates,
-        radiusMiles: DEFAULT_RADIUS_MILES,
+        radiusKm: DEFAULT_RADIUS_KM,
         unbounded: false,
       });
     } else {
@@ -170,7 +170,7 @@ export function FiltersBar({
         }}
       >
         <div style={{ fontWeight: 700, fontSize: '.92rem', color: '#38bdf8' }}>
-          🎛️ Filtros del Mapa (Radio por defecto: 8 millas • Orden: Recomendados)
+          🎛️ Filtros del Mapa (Radio por defecto: 5 km a la redonda • Orden: Recomendados)
         </div>
         {onClose && (
           <button
@@ -191,26 +191,26 @@ export function FiltersBar({
           gap: '.75rem',
         }}
       >
-        {/* Radio en millas */}
+        {/* Radio en kilómetros */}
         <label style={{ display: 'grid', gap: '.25rem', fontSize: '.78rem', color: 'var(--text-secondary)' }}>
-          <span>Radio en el mapa</span>
+          <span>Radio a la redonda</span>
           <select
             className="field"
-            value={values.unbounded ? 'unbounded' : String(values.radiusMiles)}
+            value={values.unbounded ? 'unbounded' : String(values.radiusKm)}
             onChange={(e) => {
               if (e.target.value === 'unbounded') {
                 onChange({ unbounded: true });
               } else {
                 onChange({
                   unbounded: false,
-                  radiusMiles: Number(e.target.value),
+                  radiusKm: Number(e.target.value),
                 });
               }
             }}
           >
-            {RADIUS_OPTIONS_MI.map((mi) => (
-              <option key={mi} value={mi}>
-                Hasta {mi} millas{mi === DEFAULT_RADIUS_MILES ? ' (Por defecto)' : ''}
+            {RADIUS_OPTIONS_KM.map((km) => (
+              <option key={km} value={km}>
+                Hasta {km} km a la redonda{km === DEFAULT_RADIUS_KM ? ' (Por defecto)' : ''}
               </option>
             ))}
             <option value="unbounded">Sin límite de distancia</option>
@@ -241,7 +241,7 @@ export function FiltersBar({
             value={values.citySlug}
             onChange={(e) => handleCityReferenceChange(e.target.value)}
           >
-            <option value="">📍 Mi ubicación actual (GPS)</option>
+            <option value="">📍 Mi ubicación actual (Col. Florencia Norte / GPS)</option>
             {hnCities.length > 0 && (
               <optgroup label="🇭🇳 Honduras">
                 {hnCities.map((c) => (
@@ -267,12 +267,12 @@ export function FiltersBar({
         {/* Búsqueda textual dentro del mapa */}
         <div style={{ position: 'relative', display: 'grid', gap: '.25rem' }}>
           <span style={{ fontSize: '.78rem', color: 'var(--text-secondary)' }}>
-            Filtrar por nombre o plato
+            Filtrar por nombre o antojo
           </span>
           <input
             className="field"
             type="search"
-            placeholder="Ej. Pizza, Baleadas, Mirador…"
+            placeholder="Ej. Mariscos, Pizza, Hamburguesa, Sushi…"
             value={values.searchQuery}
             onChange={(e) => onChange({ searchQuery: e.target.value })}
             onFocus={() => setShowSuggestions(suggestions.length > 0)}
@@ -345,7 +345,7 @@ export function FiltersBar({
             disabled={locating}
             style={{ fontSize: '.78rem', padding: '.32rem .75rem' }}
           >
-            {locating ? 'Detectando GPS…' : '📍 Actualizar mi GPS (8 mi)'}
+            {locating ? 'Detectando GPS…' : '📍 Actualizar mi GPS (5 km)'}
           </button>
           <button
             type="button"
@@ -354,13 +354,13 @@ export function FiltersBar({
               onChange({
                 searchQuery: '',
                 sortBy: 'recommended',
-                radiusMiles: DEFAULT_RADIUS_MILES,
+                radiusKm: DEFAULT_RADIUS_KM,
                 unbounded: false,
               })
             }
             style={{ fontSize: '.78rem', padding: '.32rem .75rem' }}
           >
-            Restablecer (8 mi • Recomendados)
+            Restablecer (5 km • Recomendados)
           </button>
         </div>
 

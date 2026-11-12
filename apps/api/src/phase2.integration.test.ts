@@ -91,21 +91,23 @@ describe('Fase 2 — Descubrimiento, favoritos, colecciones, personalización y 
     expect(nyc?.distanceMeters).toBeGreaterThan(2_000_000);
   });
 
-  it('lista ciudades y lugares de Honduras dentro de 8 millas (12.87 km) en Tegucigalpa', async () => {
+  it('lista ciudades y el Top 10+ de lugares de Honduras dentro de 5 km en Colonia Florencia Norte, Tegucigalpa', async () => {
     const hnCities = await guest.getCities('HN');
     expect(hnCities.map((c) => c.slug)).toEqual(
       expect.arrayContaining(['tegucigalpa', 'san-pedro-sula', 'roatan', 'copan-ruinas'])
     );
 
     const tguPlaces = await guest.discoverPlaces({
-      lat: 14.0818,
-      lng: -87.2068,
-      radiusKm: 12.875, // 8 millas
+      lat: 14.0885,
+      lng: -87.1815,
+      radiusKm: 5,
       categorySlug: 'comida',
       sortBy: 'recommended',
     });
-    expect(tguPlaces.data.length).toBeGreaterThanOrEqual(3);
-    expect(tguPlaces.data.map((p) => p.slug)).toContain('forno-pizzeria-tegucigalpa');
+    expect(tguPlaces.data.length).toBeGreaterThanOrEqual(10);
+    expect(tguPlaces.data[0]?.slug).toBe('el-morito-la-hacienda-tegucigalpa');
+    expect(tguPlaces.data[1]?.slug).toBe('restaurante-portobello-tegucigalpa');
+    expect(tguPlaces.data[2]?.slug).toBe('la-pana-tegucigalpa');
   });
 
   it('degrada el orden por distancia a recomendado cuando no hay coordenadas', async () => {

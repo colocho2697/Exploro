@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   SafeAreaView,
@@ -36,7 +37,13 @@ import {
   TripReorganizationImpactDTO,
   UserReviewDTO,
 } from '@exploro/shared-types';
-import { DEFAULT_RADIUS_MILES, formatDistanceUS, milesToKm, US_CITIES } from './src/format';
+import {
+  buildGoogleMapsUrl,
+  buildWazeUrl,
+  DEFAULT_RADIUS_KM,
+  formatDistanceKm,
+  US_CITIES,
+} from './src/format';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
@@ -57,7 +64,7 @@ export default function App(): React.JSX.Element {
   const [selectedCitySlug, setSelectedCitySlug] = useState<string>('tegucigalpa');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<PlaceSortBy>('recommended');
-  const [radiusMiles, setRadiusMiles] = useState<number>(DEFAULT_RADIUS_MILES);
+  const [radiusKm, setRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
   const [unbounded, setUnbounded] = useState<boolean>(false);
   const [showMapFilters, setShowMapFilters] = useState<boolean>(false);
 
@@ -173,10 +180,10 @@ export default function App(): React.JSX.Element {
     setLoading(true);
     setErrorNotice(null);
 
-    // Coordenadas actuales por defecto (Tegucigalpa, Honduras) o ciudad elegida en filtros del mapa
+    // Coordenadas actuales por defecto (Col. Florencia Norte, Tegucigalpa) o ciudad elegida en filtros del mapa
     const cityData = US_CITIES.find((c) => c.slug === selectedCitySlug);
-    const lat = cityData && 'lat' in cityData ? cityData.lat : 14.0818;
-    const lng = cityData && 'lng' in cityData ? cityData.lng : -87.2068;
+    const lat = cityData && 'lat' in cityData ? cityData.lat : 14.0885;
+    const lng = cityData && 'lng' in cityData ? cityData.lng : -87.1815;
 
     void (async () => {
       try {
@@ -186,7 +193,7 @@ export default function App(): React.JSX.Element {
           sortBy,
           lat,
           lng,
-          radiusKm: milesToKm(radiusMiles),
+          radiusKm,
           unbounded,
         });
         setPlaces(discovered.data);
@@ -196,7 +203,7 @@ export default function App(): React.JSX.Element {
         setLoading(false);
       }
     })();
-  }, [selectedMode, selectedCategorySlug, selectedCitySlug, searchQuery, sortBy, radiusMiles, unbounded, client]);
+  }, [selectedMode, selectedCategorySlug, selectedCitySlug, searchQuery, sortBy, radiusKm, unbounded, client]);
 
   // Abrir detalle de un lugar
   const handleOpenDetail = async (idOrSlug: string): Promise<void> => {
@@ -637,7 +644,7 @@ export default function App(): React.JSX.Element {
               Paso 2 de 3 • ¿Qué deseas explorar hoy?
             </Text>
             <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 14 }}>
-              📍 Usando tu ubicación actual • Radio automático: 8 millas • Orden: Recomendados
+              📍 Usando tu ubicación actual • Radio automático: 5 km a la redonda • Orden: Recomendados
             </Text>
             <View
               style={{
@@ -653,7 +660,7 @@ export default function App(): React.JSX.Element {
                   onPress={() => {
                     setSelectedCategorySlug(cat.slug);
                     setSortBy('recommended');
-                    setRadiusMiles(DEFAULT_RADIUS_MILES);
+                    setRadiusKm(DEFAULT_RADIUS_KM);
                     setUnbounded(false);
                     setShowMapFilters(false);
                   }}
@@ -674,7 +681,7 @@ export default function App(): React.JSX.Element {
                     {cat.description}
                   </Text>
                   <Text style={{ fontSize: 12, color: '#38bdf8', fontWeight: '700', marginTop: 10 }}>
-                    Ver en mapa (8 mi) →
+                    Ver en mapa (5 km) →
                   </Text>
                 </Pressable>
               ))}
@@ -682,7 +689,7 @@ export default function App(): React.JSX.Element {
           </View>
         ) : null}
 
-        {/* PASO 3: Barra de estado del Mapa (8 millas + Recomendados por defecto) y botón de filtros */}
+        {/* PASO 3: Barra de estado del Mapa (5 km a la redonda + Recomendados por defecto) y botón de filtros */}
         {activeTab === 'explore' && selectedCategorySlug ? (
           <View style={{ marginTop: 10, marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -696,7 +703,7 @@ export default function App(): React.JSX.Element {
                 <Text style={styles.chipText}>← Categorías</Text>
               </Pressable>
               <Text style={{ color: '#34d399', fontSize: 12, fontWeight: '700' }}>
-                📍 Hasta {radiusMiles} mi • ⭐ Recomendados
+                📍 Hasta {radiusKm} km • ⭐ Recomendados
               </Text>
               <Pressable
                 onPress={() => setShowMapFilters((v) => !v)}
@@ -795,7 +802,7 @@ export default function App(): React.JSX.Element {
                     style={[styles.unboundedChip, unbounded && styles.unboundedChipActive]}
                   >
                     <Text style={styles.unboundedChipText}>
-                      {unbounded ? '🌐 Sin límite' : `📍 Hasta ${radiusMiles} mi`}
+                      {unbounded ? '🌐 Sin límite' : `📍 Hasta ${radiusKm} km`}
                     </Text>
                   </Pressable>
                 </View>
@@ -1022,9 +1029,9 @@ export default function App(): React.JSX.Element {
                 </Text>
               </View>
             ) : (
-              displayedPlaces.map((place) => {
+              displayedPlaces.map((place, idx) => {
                 const isFav = favoriteIds.has(place.id);
-                const distFormatted = formatDistanceUS(place.distanceMeters);
+                const distFormatted = formatDistanceKm(place.distanceMeters);
 
                 return (
                   <Pressable
@@ -1036,7 +1043,7 @@ export default function App(): React.JSX.Element {
                       <View style={{ flex: 1 }}>
                         <View style={styles.badgeRow}>
                           <Text style={styles.placeMeta}>
-                            {place.categoryName} • {place.cityName}
+                            #{idx + 1} • {place.categoryName} • {place.cityName}
                             {place.stateCode ? `, ${place.stateCode}` : ''}
                           </Text>
                           {place.isDemoData ? (
@@ -1059,7 +1066,7 @@ export default function App(): React.JSX.Element {
                     </View>
 
                     <Text style={styles.placeReason} numberOfLines={3}>
-                      {place.recommendationReason}
+                      💡 {place.recommendationReason}
                     </Text>
 
                     <View style={styles.placeFooter}>
@@ -1076,12 +1083,42 @@ export default function App(): React.JSX.Element {
                           ) : null}
                         </Text>
                         {distFormatted ? (
-                          <Text style={styles.placeDistance}>📍 {distFormatted}</Text>
+                          <Text style={styles.placeDistance}>📍 a {distFormatted}</Text>
                         ) : null}
                       </View>
                       <Text style={styles.placeEvidenceCount}>
                         {place.recommendationCount} evidencia(s)
                       </Text>
+                    </View>
+
+                    {/* Botones directos Waze y Google Maps ($0.00) */}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          void Linking.openURL(
+                            buildWazeUrl(place.coordinates.lat, place.coordinates.lng)
+                          );
+                        }}
+                        style={[styles.switchBtn, { backgroundColor: 'rgba(56, 189, 248, 0.16)', borderColor: '#38bdf8' }]}
+                      >
+                        <Text style={{ color: '#38bdf8', fontSize: 12, fontWeight: '700' }}>
+                          🚗 Ir con Waze
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          void Linking.openURL(
+                            buildGoogleMapsUrl(place.coordinates.lat, place.coordinates.lng)
+                          );
+                        }}
+                        style={[styles.switchBtn, { backgroundColor: 'rgba(16, 185, 129, 0.16)', borderColor: '#10b981' }]}
+                      >
+                        <Text style={{ color: '#34d399', fontSize: 12, fontWeight: '700' }}>
+                          🗺️ Google Maps
+                        </Text>
+                      </Pressable>
                     </View>
                   </Pressable>
                 );
