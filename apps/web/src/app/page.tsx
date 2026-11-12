@@ -11,6 +11,7 @@ import { AuthPanel } from '../components/AuthPanel';
 import { FilterValues } from '../components/FiltersBar';
 import { LibraryPanel } from '../components/LibraryPanel';
 import { PlaceCard } from '../components/PlaceCard';
+import { BackpackerLoader } from '../components/BackpackerLoader';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { useLibrary } from '../hooks/useLibrary';
 import { useSession } from '../hooks/useSession';
@@ -532,7 +533,12 @@ export default function ExploroHomePage(): React.JSX.Element {
               </h2>
             </div>
 
-            {!discovery.loading && !discovery.error && discovery.places.length === 0 ? (
+            {discovery.loading ? (
+              <BackpackerLoader
+                message="Explorando la zona…"
+                submessage="El mochilero está buscando las mejores recomendaciones verificadas cerca de ti"
+              />
+            ) : !discovery.error && discovery.places.length === 0 ? (
               <div className="card" style={{ padding: '1.5rem', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '.85rem', fontSize: '.9rem' }}>
                   No encontramos lugares en un radio de {filterValues.radiusKm} km para este punto.

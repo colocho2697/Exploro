@@ -17,6 +17,7 @@ import {
   getPlacePhotoDetails,
   parseRecommendationReason,
 } from '../lib/format';
+import { BackpackerLoader } from './BackpackerLoader';
 
 
 const TIME_OF_DAY: Record<string, string> = {
@@ -211,8 +212,11 @@ export function PlaceDetail({
   }
   if (!activePlace) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: '#717171' }}>
-        Cargando detalles del lugar…
+      <div style={{ padding: '3.5rem 1.5rem', display: 'flex', justifyContent: 'center' }}>
+        <BackpackerLoader
+          message="Cargando detalles del lugar…"
+          submessage="Preparando fotos, opiniones y mejores rutas"
+        />
       </div>
     );
   }

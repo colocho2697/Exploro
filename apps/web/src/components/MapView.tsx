@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { Coordinates, PlaceCardDTO, RouteSummary } from '@exploro/shared-types';
 import { MAP_STYLE_URL } from '../lib/api';
 import { buildGoogleMapsUrl, buildWazeUrl } from '../lib/format';
+import { BackpackerLoader } from './BackpackerLoader';
 
 interface Props {
   places: PlaceCardDTO[];
@@ -533,11 +534,33 @@ export default function MapView({
       </div>
 
       {/* CONTENEDOR LIMPIO DEL MAPA */}
-      <div
-        ref={container}
-        className="map-box"
-        aria-label="Mapa interactivo con radio de búsqueda"
-      />
+      <div style={{ position: 'relative' }}>
+        <div
+          ref={container}
+          className="map-box"
+          aria-label="Mapa interactivo con radio de búsqueda"
+        />
+        {searchingCity && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 20,
+              boxShadow: '0 12px 36px rgba(0,0,0,0.18)',
+              borderRadius: '1.25rem',
+            }}
+          >
+            <BackpackerLoader
+              size="small"
+              compact
+              message="Viajando a tu destino…"
+              submessage="Localizando en el mapa"
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
