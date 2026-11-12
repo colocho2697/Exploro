@@ -1,7 +1,10 @@
 export const KM_PER_MILE = 1.609344;
 
-/** Opciones de radio en millas (mercado EE. UU.); la API trabaja en kilómetros. */
-export const RADIUS_OPTIONS_MI = [1, 5, 10, 25, 50] as const;
+/** Radio inicial por defecto en el mapa (8 millas). */
+export const DEFAULT_RADIUS_MILES = 8;
+
+/** Opciones de radio en millas; la API trabaja en kilómetros. */
+export const RADIUS_OPTIONS_MI = [1, 3, 5, 8, 15, 25, 50] as const;
 
 export function milesToKm(miles: number): number {
   return Number((miles * KM_PER_MILE).toFixed(3));

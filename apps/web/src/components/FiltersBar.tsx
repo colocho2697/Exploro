@@ -8,7 +8,7 @@ import {
   Coordinates,
   PlaceSortBy,
 } from '@exploro/shared-types';
-import { RADIUS_OPTIONS_MI } from '../lib/format';
+import { DEFAULT_RADIUS_MILES, RADIUS_OPTIONS_MI } from '../lib/format';
 
 export interface FilterValues {
   citySlug: string;
@@ -28,22 +28,23 @@ interface Props {
   onChange: (patch: Partial<FilterValues>) => void;
   onTogglePersonalization: (enabled: boolean) => void;
   onSelectSuggestion?: (sug: AutocompleteSuggestion) => void;
+  onClose?: () => void;
 }
 
 const SORT_LABELS: Record<PlaceSortBy, string> = {
-  recommended: 'Recomendados',
-  distance: 'Más cercanos',
-  name: 'Nombre (A–Z)',
+  recommended: '⭐ Recomendados (Por defecto)',
+  distance: '📍 Más cercanos',
+  name: '🔤 Nombre (A–Z)',
 };
 
 function geolocationMessage(error: GeolocationPositionError): string {
   if (error.code === error.PERMISSION_DENIED) {
-    return 'Permiso de ubicación denegado. Puedes elegir una ciudad manualmente.';
+    return 'Permiso de GPS denegado. Usando ubicación de referencia en el mapa.';
   }
   if (error.code === error.TIMEOUT) {
-    return 'La ubicación tardó demasiado. Inténtalo de nuevo o elige una ciudad.';
+    return 'El GPS tardó demasiado. Inténtalo de nuevo o cambia la zona en el mapa.';
   }
-  return 'No se pudo determinar tu ubicación. Elige una ciudad manualmente.';
+  return 'No se pudo obtener el GPS exacto.';
 }
 
 export function FiltersBar({
@@ -55,13 +56,15 @@ export function FiltersBar({
   onChange,
   onTogglePersonalization,
   onSelectSuggestion,
+  onClose,
 }: Props): React.JSX.Element {
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
-
-  // Autocomplete estado
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const hnCities = cities.filter((c) => c.countryIsoCode === 'HN');
+  const usCities = cities.filter((c) => c.countryIsoCode !== 'HN');
 
   useEffect(() => {
     if (!client || values.searchQuery.trim().length < 2) {
@@ -89,11 +92,10 @@ export function FiltersBar({
     return () => clearTimeout(timer);
   }, [values.searchQuery, values.citySlug, client]);
 
-  /** El permiso de ubicación se solicita solo cuando el usuario pulsa el botón. */
   const useMyLocation = (): void => {
     setLocationError(null);
     if (!('geolocation' in navigator)) {
-      setLocationError('Tu navegador no admite geolocalización. Elige una ciudad.');
+      setLocationError('Tu navegador no admite geolocalización.');
       return;
     }
     setLocating(true);
@@ -103,7 +105,9 @@ export function FiltersBar({
         onChange({
           coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
           citySlug: '',
-          sortBy: 'distance',
+          radiusMiles: DEFAULT_RADIUS_MILES,
+          unbounded: false,
+          sortBy: 'recommended',
         });
       },
       (err) => {
@@ -112,6 +116,20 @@ export function FiltersBar({
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 }
     );
+  };
+
+  const handleCityReferenceChange = (slug: string): void => {
+    if (!slug) {
+      onChange({ citySlug: '', unbounded: true, coords: null });
+      return;
+    }
+    const found = cities.find((c) => c.slug === slug);
+    onChange({
+      citySlug: slug,
+      coords: found ? found.center : values.coords,
+      radiusMiles: values.radiusMiles || DEFAULT_RADIUS_MILES,
+      unbounded: false,
+    });
   };
 
   const handleSuggestionClick = (sug: AutocompleteSuggestion): void => {
@@ -124,31 +142,141 @@ export function FiltersBar({
         citySlug: matchedCity?.slug ?? '',
         searchQuery: '',
         coords: sug.coordinates,
+        radiusMiles: DEFAULT_RADIUS_MILES,
+        unbounded: false,
       });
     } else {
-      onChange({
-        searchQuery: sug.title,
-      });
+      onChange({ searchQuery: sug.title });
     }
     onSelectSuggestion?.(sug);
   };
 
   return (
-    <div className="card" style={{ padding: '1rem', display: 'grid', gap: '.8rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '.7rem' }}>
-        <div style={{ position: 'relative' }}>
-          <label>
-            <span className="sr-only">Buscar</span>
-            <input
-              className="field"
-              type="search"
-              placeholder="Buscar por nombre o descripción"
-              value={values.searchQuery}
-              onChange={(e) => onChange({ searchQuery: e.target.value })}
-              onFocus={() => setShowSuggestions(suggestions.length > 0)}
-              style={{ width: '100%' }}
-            />
-          </label>
+    <div
+      className="card"
+      style={{
+        padding: '1rem 1.15rem',
+        display: 'grid',
+        gap: '.85rem',
+        border: '1px solid rgba(56, 189, 248, 0.35)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '.5rem',
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: '.92rem', color: '#38bdf8' }}>
+          🎛️ Filtros del Mapa (Radio por defecto: 8 millas • Orden: Recomendados)
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            className="btn"
+            onClick={onClose}
+            style={{ padding: '.25rem .65rem', fontSize: '.78rem' }}
+          >
+            Ocultar filtros ✕
+          </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))',
+          gap: '.75rem',
+        }}
+      >
+        {/* Radio en millas */}
+        <label style={{ display: 'grid', gap: '.25rem', fontSize: '.78rem', color: 'var(--text-secondary)' }}>
+          <span>Radio en el mapa</span>
+          <select
+            className="field"
+            value={values.unbounded ? 'unbounded' : String(values.radiusMiles)}
+            onChange={(e) => {
+              if (e.target.value === 'unbounded') {
+                onChange({ unbounded: true });
+              } else {
+                onChange({
+                  unbounded: false,
+                  radiusMiles: Number(e.target.value),
+                });
+              }
+            }}
+          >
+            {RADIUS_OPTIONS_MI.map((mi) => (
+              <option key={mi} value={mi}>
+                Hasta {mi} millas{mi === DEFAULT_RADIUS_MILES ? ' (Por defecto)' : ''}
+              </option>
+            ))}
+            <option value="unbounded">Sin límite de distancia</option>
+          </select>
+        </label>
+
+        {/* Orden */}
+        <label style={{ display: 'grid', gap: '.25rem', fontSize: '.78rem', color: 'var(--text-secondary)' }}>
+          <span>Ordenar resultados</span>
+          <select
+            className="field"
+            value={values.sortBy}
+            onChange={(e) => onChange({ sortBy: e.target.value as PlaceSortBy })}
+          >
+            {(Object.keys(SORT_LABELS) as PlaceSortBy[]).map((key) => (
+              <option key={key} value={key} disabled={key === 'distance' && !values.coords}>
+                {SORT_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {/* Zona / Ubicación de referencia (opcional en el mapa) */}
+        <label style={{ display: 'grid', gap: '.25rem', fontSize: '.78rem', color: 'var(--text-secondary)' }}>
+          <span>Ubicación o zona en el mapa</span>
+          <select
+            className="field"
+            value={values.citySlug}
+            onChange={(e) => handleCityReferenceChange(e.target.value)}
+          >
+            <option value="">📍 Mi ubicación actual (GPS)</option>
+            {hnCities.length > 0 && (
+              <optgroup label="🇭🇳 Honduras">
+                {hnCities.map((c) => (
+                  <option key={c.id} value={c.slug}>
+                    {c.name} (Honduras)
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {usCities.length > 0 && (
+              <optgroup label="🇺🇸 Estados Unidos">
+                {usCities.map((c) => (
+                  <option key={c.id} value={c.slug}>
+                    {c.name}
+                    {c.stateCode ? `, ${c.stateCode}` : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </label>
+
+        {/* Búsqueda textual dentro del mapa */}
+        <div style={{ position: 'relative', display: 'grid', gap: '.25rem' }}>
+          <span style={{ fontSize: '.78rem', color: 'var(--text-secondary)' }}>
+            Filtrar por nombre o plato
+          </span>
+          <input
+            className="field"
+            type="search"
+            placeholder="Ej. Pizza, Baleadas, Mirador…"
+            value={values.searchQuery}
+            onChange={(e) => onChange({ searchQuery: e.target.value })}
+            onFocus={() => setShowSuggestions(suggestions.length > 0)}
+          />
           {showSuggestions && suggestions.length > 0 ? (
             <ul
               style={{
@@ -198,120 +326,62 @@ export function FiltersBar({
             </ul>
           ) : null}
         </div>
-
-        <label>
-          <span className="sr-only">Ciudad</span>
-          <select
-            className="field"
-            value={values.citySlug}
-            onChange={(e) => onChange({ citySlug: e.target.value, coords: null })}
-          >
-            <option value="">Todas las ciudades (EE. UU.)</option>
-            {cities.map((c) => (
-              <option key={c.id} value={c.slug}>
-                {c.name}
-                {c.stateCode ? `, ${c.stateCode}` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span className="sr-only">Ordenar por</span>
-          <select
-            className="field"
-            value={values.sortBy}
-            onChange={(e) => onChange({ sortBy: e.target.value as PlaceSortBy })}
-          >
-            {(Object.keys(SORT_LABELS) as PlaceSortBy[]).map((key) => (
-              <option key={key} value={key} disabled={key === 'distance' && !values.coords}>
-                {SORT_LABELS[key]}
-                {key === 'distance' && !values.coords ? ' (requiere ubicación)' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.7rem', alignItems: 'center' }}>
-        {values.coords ? (
-          <>
-            <span className="badge" style={{ background: 'rgba(16,185,129,.15)', color: '#34d399' }}>
-              Usando tu ubicación
-            </span>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => onChange({ coords: null, sortBy: 'recommended' })}
-              style={{ fontSize: '.75rem', padding: '.2rem .55rem' }}
-            >
-              Borrar ubicación
-            </button>
-          </>
-        ) : (
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '.65rem',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn"
             onClick={useMyLocation}
             disabled={locating}
-            style={{ fontSize: '.8rem' }}
+            style={{ fontSize: '.78rem', padding: '.32rem .75rem' }}
           >
-            {locating ? 'Obteniendo GPS…' : '📍 Usar mi ubicación'}
+            {locating ? 'Detectando GPS…' : '📍 Actualizar mi GPS (8 mi)'}
           </button>
-        )}
+          <button
+            type="button"
+            className="btn"
+            onClick={() =>
+              onChange({
+                searchQuery: '',
+                sortBy: 'recommended',
+                radiusMiles: DEFAULT_RADIUS_MILES,
+                unbounded: false,
+              })
+            }
+            style={{ fontSize: '.78rem', padding: '.32rem .75rem' }}
+          >
+            Restablecer (8 mi • Recomendados)
+          </button>
+        </div>
 
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '.4rem', fontSize: '.85rem' }}>
+        <label
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '.45rem',
+            fontSize: '.82rem',
+            cursor: isLoggedIn ? 'pointer' : 'not-allowed',
+            opacity: isLoggedIn ? 1 : 0.6,
+          }}
+        >
           <input
             type="checkbox"
-            checked={values.unbounded}
-            onChange={(e) => onChange({ unbounded: e.target.checked })}
+            disabled={!isLoggedIn}
+            checked={personalizationEnabled && isLoggedIn}
+            onChange={(e) => onTogglePersonalization(e.target.checked)}
           />
-          Sin límite de radio (todo EE. UU.)
+          Personalizar con mis gustos
         </label>
-
-        {!values.unbounded && (
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '.4rem', fontSize: '.85rem' }}>
-            <span>Radio:</span>
-            <select
-              className="field"
-              style={{ padding: '.25rem .5rem', fontSize: '.8rem' }}
-              value={values.radiusMiles}
-              onChange={(e) => onChange({ radiusMiles: Number(e.target.value) })}
-            >
-              {RADIUS_OPTIONS_MI.map((mi) => (
-                <option key={mi} value={mi}>
-                  {mi} millas
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '.5rem' }}>
-          <label
-            title={
-              isLoggedIn
-                ? 'Aplica tus categorías favoritas y estilo de viaje al orden recomendado.'
-                : 'Inicia sesión para que tus preferencias modifiquen el orden.'
-            }
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '.4rem',
-              fontSize: '.85rem',
-              cursor: isLoggedIn ? 'pointer' : 'not-allowed',
-              opacity: isLoggedIn ? 1 : 0.6,
-            }}
-          >
-            <input
-              type="checkbox"
-              disabled={!isLoggedIn}
-              checked={personalizationEnabled && isLoggedIn}
-              onChange={(e) => onTogglePersonalization(e.target.checked)}
-            />
-            Personalizar con mis gustos
-          </label>
-        </div>
       </div>
 
       {locationError && (

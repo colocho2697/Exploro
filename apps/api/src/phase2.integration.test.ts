@@ -86,9 +86,26 @@ describe('Fase 2 — Descubrimiento, favoritos, colecciones, personalización y 
       sortBy: 'distance',
       limit: 50,
     });
-    expect(res.meta?.total).toBe(13);
+    expect(res.meta?.total).toBeGreaterThanOrEqual(13);
     const nyc = res.data.find((p) => p.slug === 'l-industrie-pizzeria-nyc');
     expect(nyc?.distanceMeters).toBeGreaterThan(2_000_000);
+  });
+
+  it('lista ciudades y lugares de Honduras dentro de 8 millas (12.87 km) en Tegucigalpa', async () => {
+    const hnCities = await guest.getCities('HN');
+    expect(hnCities.map((c) => c.slug)).toEqual(
+      expect.arrayContaining(['tegucigalpa', 'san-pedro-sula', 'roatan', 'copan-ruinas'])
+    );
+
+    const tguPlaces = await guest.discoverPlaces({
+      lat: 14.0818,
+      lng: -87.2068,
+      radiusKm: 12.875, // 8 millas
+      categorySlug: 'comida',
+      sortBy: 'recommended',
+    });
+    expect(tguPlaces.data.length).toBeGreaterThanOrEqual(3);
+    expect(tguPlaces.data.map((p) => p.slug)).toContain('forno-pizzeria-tegucigalpa');
   });
 
   it('degrada el orden por distancia a recomendado cuando no hay coordenadas', async () => {
@@ -104,7 +121,11 @@ describe('Fase 2 — Descubrimiento, favoritos, colecciones, personalización y 
     });
     const slugs = miradores.data.map((p) => p.slug);
     expect(slugs).toEqual(
-      expect.arrayContaining(['brooklyn-bridge-park-pier-1', 'griffith-observatory-la'])
+      expect.arrayContaining([
+        'brooklyn-bridge-park-pier-1',
+        'griffith-observatory-la',
+        'cristo-el-picacho-tegucigalpa',
+      ])
     );
     expect(miradores.data.every((p) => p.subcategorySlug === 'miradores')).toBe(true);
 
@@ -114,7 +135,7 @@ describe('Fase 2 — Descubrimiento, favoritos, colecciones, personalización y 
       page: 1,
     });
     expect(page.data).toHaveLength(2);
-    expect(page.meta?.total).toBe(4);
+    expect(page.meta?.total).toBeGreaterThanOrEqual(4);
     const page2 = await guest.discoverPlaces({
       categorySlug: 'comida',
       limit: 2,

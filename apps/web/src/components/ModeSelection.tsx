@@ -10,69 +10,151 @@ interface Props {
 }
 
 /**
- * Primera pantalla (Paso 1.5): no muestra recomendaciones hasta elegir modalidad.
- * «Soy local» se muestra como próximamente y no es funcional en la v1.
+ * Paso 1: Selección de modalidad en tarjetas visuales compactas sin scroll.
  */
 export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.Element {
   return (
     <main
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: '2rem',
+        padding: '1.25rem',
       }}
     >
-      <div style={{ maxWidth: 760, width: '100%', textAlign: 'center' }}>
-        <span className="badge" style={{ background: 'rgba(16,185,129,.15)', color: '#34d399', marginBottom: '1rem' }}>
-          Estados Unidos • Recomendaciones basadas en evidencias
-        </span>
-        <h1 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.2rem)', fontWeight: 800, marginBottom: '.75rem' }}>
+      <div style={{ maxWidth: 680, width: '100%', textAlign: 'center' }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '.5rem',
+            marginBottom: '.85rem',
+          }}
+        >
+          <span
+            className="badge"
+            style={{
+              background: 'rgba(16,185,129,.16)',
+              color: '#34d399',
+              border: '1px solid rgba(16,185,129,.3)',
+              padding: '.3rem .8rem',
+            }}
+          >
+            🇭🇳 Honduras & 🇺🇸 EE. UU. • Basado en Evidencias
+          </span>
+          <span className="step-pill-bar">Paso 1 de 3</span>
+        </div>
+
+        <h1
+          style={{
+            fontSize: 'clamp(2rem, 5vw, 3rem)',
+            fontWeight: 800,
+            letterSpacing: '-0.02em',
+            marginBottom: '.5rem',
+          }}
+        >
           Exploro
         </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', maxWidth: 580, margin: '0 auto 2.5rem' }}>
-          Descubre lugares y experiencias respaldadas por evidencias. Elige cómo quieres explorar hoy:
+        <p
+          style={{
+            color: 'var(--text-secondary)',
+            fontSize: '.98rem',
+            maxWidth: 500,
+            margin: '0 auto 1.65rem',
+          }}
+        >
+          Descubre lugares cercanos a tu ubicación actual paso a paso. ¿Cómo exploras hoy?
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.25rem', textAlign: 'left' }}>
-          {modes.map((m) => (
-            <button
-              key={m.mode}
-              type="button"
-              className="card"
-              onClick={() => onSelect(m.mode)}
-              aria-disabled={!m.enabled}
-              style={{
-                padding: '1.75rem',
-                color: 'var(--text-primary)',
-                opacity: m.enabled ? 1 : 0.72,
-                borderStyle: m.enabled ? 'solid' : 'dashed',
-                borderColor: m.enabled ? 'rgba(56,189,248,.45)' : 'rgba(148,163,184,.25)',
-                textAlign: 'left',
-                minHeight: 200,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '.75rem' }}>
-                  <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{m.label}</span>
-                  {m.badgeText && <span className="badge badge-demo">{m.badgeText}</span>}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '1rem',
+            textAlign: 'left',
+          }}
+        >
+          {modes.map((m) => {
+            const isTraveler = m.mode === 'TRAVELER';
+            return (
+              <button
+                key={m.mode}
+                type="button"
+                className="category-card-btn"
+                onClick={() => onSelect(m.mode)}
+                aria-disabled={!m.enabled}
+                style={{
+                  padding: '1.4rem',
+                  opacity: m.enabled ? 1 : 0.68,
+                  borderStyle: m.enabled ? 'solid' : 'dashed',
+                  borderColor: m.enabled
+                    ? 'rgba(56,189,248,.48)'
+                    : 'rgba(148,163,184,.22)',
+                  minHeight: 168,
+                }}
+              >
+                <div style={{ width: '100%' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '.6rem',
+                    }}
+                  >
+                    <span
+                      className="category-card-icon"
+                      style={{
+                        marginBottom: 0,
+                        background: isTraveler
+                          ? 'rgba(56,189,248,0.18)'
+                          : 'rgba(148,163,184,0.12)',
+                      }}
+                    >
+                      {isTraveler ? '✈️' : '🏠'}
+                    </span>
+                    {m.badgeText ? (
+                      <span className="badge badge-demo">{m.badgeText}</span>
+                    ) : (
+                      <span
+                        className="badge"
+                        style={{
+                          background: 'rgba(56,189,248,.16)',
+                          color: '#38bdf8',
+                        }}
+                      >
+                        GPS Activo • 8 mi
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '.35rem' }}>
+                    {m.label}
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '.88rem' }}>
+                    {m.subtitle}
+                  </p>
                 </div>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '.95rem' }}>{m.subtitle}</p>
-              </div>
-              <div style={{ marginTop: '1.5rem', fontWeight: 600, color: m.enabled ? '#38bdf8' : '#94a3b8' }}>
-                {m.enabled ? 'Comenzar exploración →' : 'No habilitado en v1 (Próximamente)'}
-              </div>
-            </button>
-          ))}
+                <div
+                  style={{
+                    marginTop: '1rem',
+                    fontWeight: 700,
+                    fontSize: '.88rem',
+                    color: m.enabled ? '#38bdf8' : '#94a3b8',
+                  }}
+                >
+                  {m.enabled
+                    ? 'Elegir categoría →'
+                    : 'No habilitado en v1 (Próximamente)'}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {feedback && (
-          <div role="alert" className="alert alert-warn" style={{ marginTop: '1.5rem' }}>
+          <div role="alert" className="alert alert-warn" style={{ marginTop: '1.15rem' }}>
             {feedback}
           </div>
         )}
@@ -80,4 +162,3 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
     </main>
   );
 }
-

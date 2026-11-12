@@ -166,6 +166,8 @@ export class CatalogService {
   }
 
   public async getCities(countryIso = 'US'): Promise<CityDTO[]> {
+    const normalized = countryIso.trim().toUpperCase();
+    const filterByCountry = normalized !== '' && normalized !== 'ALL';
     const res = await this.db.query<{
       id: string;
       country_id: string;
@@ -179,8 +181,9 @@ export class CatalogService {
       `SELECT c.id, c.country_id, co.iso_code, c.name, c.state_code, c.slug,
               ST_Y(c.center_point::geometry) AS lat, ST_X(c.center_point::geometry) AS lng
        FROM cities c JOIN countries co ON co.id = c.country_id
-       WHERE co.iso_code = $1 ORDER BY c.name ASC`,
-      [countryIso.toUpperCase()]
+       ${filterByCountry ? 'WHERE co.iso_code = $1' : ''}
+       ORDER BY CASE WHEN co.iso_code = 'HN' THEN 0 ELSE 1 END, c.name ASC`,
+      filterByCountry ? [normalized] : []
     );
 
     return res.rows.map((row) => ({

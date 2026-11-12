@@ -66,6 +66,27 @@ describe('@exploro/api-client', () => {
     );
   });
 
+  it('no invoca fetch con this ligado a la instancia de ExploroApiClient (evita Illegal invocation en Window)', async () => {
+    const strictWindowFetch = function (this: unknown) {
+      if (this instanceof ExploroApiClient) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: [] }),
+      });
+    };
+
+    const client = new ExploroApiClient({
+      baseUrl: 'http://localhost:4000/api/v1',
+      fetchImpl: strictWindowFetch as unknown as typeof fetch,
+    });
+
+    const cats = await client.getCategories();
+    expect(cats).toEqual([]);
+  });
+
   it('permite iniciar actividad, verificar visita y completar con reseña adaptada (Fase 5)', async () => {
     const mockFetch = vi
       .fn()

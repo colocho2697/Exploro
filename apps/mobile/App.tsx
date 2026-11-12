@@ -36,7 +36,7 @@ import {
   TripReorganizationImpactDTO,
   UserReviewDTO,
 } from '@exploro/shared-types';
-import { formatDistanceUS, US_CITIES } from './src/format';
+import { DEFAULT_RADIUS_MILES, formatDistanceUS, milesToKm, US_CITIES } from './src/format';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
@@ -50,14 +50,16 @@ export default function App(): React.JSX.Element {
   const [selectedMode, setSelectedMode] = useState<ExplorationMode | null>(null);
   const [localNotice, setLocalNotice] = useState<string | null>(null);
 
-  // Navegación principal y vistas
+  // Navegación principal y vistas paso a paso (Categoría en Cards -> Mapa 8 mi)
   const [activeTab, setActiveTab] = useState<'explore' | 'favorites' | 'trips'>('explore');
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string>('');
-  const [selectedCitySlug, setSelectedCitySlug] = useState<string>('');
+  const [selectedCitySlug, setSelectedCitySlug] = useState<string>('tegucigalpa');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<PlaceSortBy>('recommended');
-  const [unbounded, setUnbounded] = useState<boolean>(true);
+  const [radiusMiles, setRadiusMiles] = useState<number>(DEFAULT_RADIUS_MILES);
+  const [unbounded, setUnbounded] = useState<boolean>(false);
+  const [showMapFilters, setShowMapFilters] = useState<boolean>(false);
 
   // Fase 6: Planificador de Viajes (Oculto bajo Feature Flag)
   const [internalOverride, setInternalOverride] = useState<boolean>(true);
@@ -165,26 +167,26 @@ export default function App(): React.JSX.Element {
     return () => clearTimeout(timer);
   }, [searchQuery, selectedCitySlug, selectedMode, client]);
 
-  // Consulta de lugares según filtros y orden
+  // Consulta de lugares según filtros y orden (solo tras elegir categoría en el paso 2)
   useEffect(() => {
-    if (selectedMode !== 'TRAVELER') return;
+    if (selectedMode !== 'TRAVELER' || !selectedCategorySlug) return;
     setLoading(true);
     setErrorNotice(null);
 
-    // Encuentra coordenadas de la ciudad si está seleccionada
+    // Coordenadas actuales por defecto (Tegucigalpa, Honduras) o ciudad elegida en filtros del mapa
     const cityData = US_CITIES.find((c) => c.slug === selectedCitySlug);
-    const lat = cityData && 'lat' in cityData ? cityData.lat : undefined;
-    const lng = cityData && 'lng' in cityData ? cityData.lng : undefined;
+    const lat = cityData && 'lat' in cityData ? cityData.lat : 14.0818;
+    const lng = cityData && 'lng' in cityData ? cityData.lng : -87.2068;
 
     void (async () => {
       try {
         const discovered = await client.discoverPlaces({
           categorySlug: selectedCategorySlug || undefined,
-          citySlug: selectedCitySlug || undefined,
           searchQuery: searchQuery.trim() || undefined,
           sortBy,
           lat,
           lng,
+          radiusKm: milesToKm(radiusMiles),
           unbounded,
         });
         setPlaces(discovered.data);
@@ -194,7 +196,7 @@ export default function App(): React.JSX.Element {
         setLoading(false);
       }
     })();
-  }, [selectedMode, selectedCategorySlug, selectedCitySlug, searchQuery, sortBy, unbounded, client]);
+  }, [selectedMode, selectedCategorySlug, selectedCitySlug, searchQuery, sortBy, radiusMiles, unbounded, client]);
 
   // Abrir detalle de un lugar
   const handleOpenDetail = async (idOrSlug: string): Promise<void> => {
@@ -628,146 +630,179 @@ export default function App(): React.JSX.Element {
           </Pressable>
         </View>
 
-        {/* Barra de Búsqueda con Autocomplete */}
-        <View style={styles.searchContainer}>
-          <TextInput
-            placeholder="Buscar lugares, museos, comida..."
-            placeholderTextColor="#64748b"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-          />
-          {searchQuery.length > 0 ? (
-            <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
-              <Text style={styles.clearSearchText}>✕</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {/* Sugerencias de Autocomplete */}
-        {autocompleteSuggestions.length > 0 ? (
-          <View style={styles.suggestionsContainer}>
-            {autocompleteSuggestions.map((sug) => (
-              <Pressable
-                key={sug.id}
-                onPress={() => {
-                  if (sug.type === 'city') {
-                    const matched = US_CITIES.find(
-                      (c) => c.value.toLowerCase() === sug.city?.toLowerCase()
-                    );
-                    setSelectedCitySlug(matched?.slug ?? '');
-                    setSearchQuery('');
-                  } else {
-                    setSearchQuery(sug.title);
-                  }
-                  setAutocompleteSuggestions([]);
-                }}
-                style={styles.suggestionItem}
-              >
-                <View>
-                  <Text style={styles.suggestionTitle}>{sug.title}</Text>
-                  <Text style={styles.suggestionSub}>{sug.subtitle}</Text>
-                </View>
-                <Text style={styles.suggestionBadge}>
-                  {sug.type === 'city' ? 'Ciudad' : 'Lugar'}
-                </Text>
-              </Pressable>
-            ))}
+        {/* PASO 2: Selección de Categoría mediante Tarjetas (Sin campos ni scroll) */}
+        {activeTab === 'explore' && !selectedCategorySlug ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>
+              Paso 2 de 3 • ¿Qué deseas explorar hoy?
+            </Text>
+            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 14 }}>
+              📍 Usando tu ubicación actual • Radio automático: 8 millas • Orden: Recomendados
+            </Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                gap: 10,
+              }}
+            >
+              {categories.map((cat) => (
+                <Pressable
+                  key={cat.id}
+                  onPress={() => {
+                    setSelectedCategorySlug(cat.slug);
+                    setSortBy('recommended');
+                    setRadiusMiles(DEFAULT_RADIUS_MILES);
+                    setUnbounded(false);
+                    setShowMapFilters(false);
+                  }}
+                  style={{
+                    width: '48%',
+                    backgroundColor: '#131c31',
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: 'rgba(56, 189, 248, 0.3)',
+                    marginBottom: 10,
+                  }}
+                >
+                  <Text style={{ fontSize: 17, fontWeight: '800', color: '#f8fafc', marginBottom: 4 }}>
+                    {cat.name}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#94a3b8' }} numberOfLines={2}>
+                    {cat.description}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#38bdf8', fontWeight: '700', marginTop: 10 }}>
+                    Ver en mapa (8 mi) →
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         ) : null}
 
-        {/* Filtro de Ciudades de EE. UU. */}
-        <Text style={styles.filterLabel}>Ciudad (EE. UU.):</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.horizontalScroll}
-        >
-          {US_CITIES.map((c) => {
-            const active = selectedCitySlug === c.slug;
-            return (
+        {/* PASO 3: Barra de estado del Mapa (8 millas + Recomendados por defecto) y botón de filtros */}
+        {activeTab === 'explore' && selectedCategorySlug ? (
+          <View style={{ marginTop: 10, marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <Pressable
-                key={c.slug}
-                onPress={() => setSelectedCitySlug(c.slug)}
-                style={[styles.cityChip, active && styles.cityChipActive]}
+                onPress={() => {
+                  setSelectedCategorySlug('');
+                  setShowMapFilters(false);
+                }}
+                style={styles.categoryChip}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {c.label}
+                <Text style={styles.chipText}>← Categorías</Text>
+              </Pressable>
+              <Text style={{ color: '#34d399', fontSize: 12, fontWeight: '700' }}>
+                📍 Hasta {radiusMiles} mi • ⭐ Recomendados
+              </Text>
+              <Pressable
+                onPress={() => setShowMapFilters((v) => !v)}
+                style={[styles.categoryChip, showMapFilters && styles.categoryChipActive]}
+              >
+                <Text style={[styles.chipText, showMapFilters && styles.chipTextActive]}>
+                  🎛️ {showMapFilters ? 'Ocultar' : 'Filtros'}
                 </Text>
               </Pressable>
-            );
-          })}
-        </ScrollView>
+            </View>
 
-        {/* Filtro de Categorías */}
-        <Text style={styles.filterLabel}>Categoría:</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.horizontalScroll}
-        >
-          <Pressable
-            onPress={() => setSelectedCategorySlug('')}
-            style={[styles.categoryChip, selectedCategorySlug === '' && styles.categoryChipActive]}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                selectedCategorySlug === '' && styles.chipTextActive,
-              ]}
-            >
-              Todas
-            </Text>
-          </Pressable>
-          {categories.map((cat) => {
-            const active = selectedCategorySlug === cat.slug;
-            return (
-              <Pressable
-                key={cat.id}
-                onPress={() => setSelectedCategorySlug(active ? '' : cat.slug)}
-                style={[styles.categoryChip, active && styles.categoryChipActive]}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {cat.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+            {showMapFilters ? (
+              <View>
+                <View style={styles.searchContainer}>
+                  <TextInput
+                    placeholder="Filtrar en el mapa..."
+                    placeholderTextColor="#64748b"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    style={styles.searchInput}
+                  />
+                  {searchQuery.length > 0 ? (
+                    <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
+                      <Text style={styles.clearSearchText}>✕</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
 
-        {/* Filtro de Ordenamiento y Radio */}
-        <View style={styles.sortRow}>
-          <View style={styles.sortChips}>
-            {(
-              [
-                ['recommended', 'Recomendados'],
-                ['distance', 'Distancia'],
-                ['name', 'Nombre'],
-              ] as const
-            ).map(([key, label]) => {
-              const active = sortBy === key;
-              return (
-                <Pressable
-                  key={key}
-                  onPress={() => setSortBy(key)}
-                  style={[styles.sortChip, active && styles.sortChipActive]}
+                {autocompleteSuggestions.length > 0 ? (
+                  <View style={styles.suggestionsContainer}>
+                    {autocompleteSuggestions.map((sug) => (
+                      <Pressable
+                        key={sug.id}
+                        onPress={() => {
+                          setSearchQuery(sug.title);
+                          setAutocompleteSuggestions([]);
+                        }}
+                        style={styles.suggestionItem}
+                      >
+                        <View>
+                          <Text style={styles.suggestionTitle}>{sug.title}</Text>
+                          <Text style={styles.suggestionSub}>{sug.subtitle}</Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                <Text style={styles.filterLabel}>Zona de referencia (Honduras y EE. UU.):</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.horizontalScroll}
                 >
-                  <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                  {US_CITIES.map((c) => {
+                    const active = selectedCitySlug === c.slug;
+                    return (
+                      <Pressable
+                        key={c.slug || 'all'}
+                        onPress={() => setSelectedCitySlug(c.slug)}
+                        style={[styles.cityChip, active && styles.cityChipActive]}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {c.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                <View style={styles.sortRow}>
+                  <View style={styles.sortChips}>
+                    {(
+                      [
+                        ['recommended', '⭐ Recomendados'],
+                        ['distance', '📍 Distancia'],
+                        ['name', '🔤 Nombre'],
+                      ] as const
+                    ).map(([key, label]) => {
+                      const active = sortBy === key;
+                      return (
+                        <Pressable
+                          key={key}
+                          onPress={() => setSortBy(key)}
+                          style={[styles.sortChip, active && styles.sortChipActive]}
+                        >
+                          <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
+                            {label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Pressable
+                    onPress={() => setUnbounded((prev) => !prev)}
+                    style={[styles.unboundedChip, unbounded && styles.unboundedChipActive]}
+                  >
+                    <Text style={styles.unboundedChipText}>
+                      {unbounded ? '🌐 Sin límite' : `📍 Hasta ${radiusMiles} mi`}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </View>
-          <Pressable
-            onPress={() => setUnbounded((prev) => !prev)}
-            style={[styles.unboundedChip, unbounded && styles.unboundedChipActive]}
-          >
-            <Text style={styles.unboundedChipText}>
-              {unbounded ? '🌐 Todo EE. UU.' : '📍 Radio acotado'}
-            </Text>
-          </Pressable>
-        </View>
+        ) : null}
 
         {/* Mensaje de error si la conexión falló */}
         {errorNotice ? (

@@ -95,7 +95,10 @@ export class ExploroApiClient {
   constructor(options: ExploroApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.getAccessToken = options.getAccessToken;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    const customFetch = options.fetchImpl;
+    this.fetchImpl = customFetch
+      ? (input: RequestInfo | URL, init?: RequestInit) => customFetch(input, init)
+      : (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init);
     this.defaultHeaders = options.defaultHeaders;
   }
 
