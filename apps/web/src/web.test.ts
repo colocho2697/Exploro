@@ -10,11 +10,13 @@ import {
   DEFAULT_RADIUS_KM,
   formatDistanceKm,
   formatDistanceUS,
+  getPlacePhotoDetails,
   getPlacePhotoGallery,
   milesToKm,
   parseRecommendationReason,
   RADIUS_OPTIONS_MI,
 } from './lib/format';
+
 
 describe('@exploro/web — Reglas de la Pantalla Inicial (Paso 1.5)', () => {
   it('presenta únicamente «Estoy de viaje» habilitado y «Soy local (próximamente)» deshabilitado', () => {
@@ -84,5 +86,26 @@ describe('@exploro/web — Formato para EE. UU. (Fase 2)', () => {
       imageUrl: null,
     });
     expect(gallery.length).toBeGreaterThanOrEqual(4);
+
+    // Verificación de fotos reales de Google Places con atribución de autor
+    const photoDetails = getPlacePhotoDetails({
+      slug: 'el-morito-la-hacienda-tegucigalpa',
+      categorySlug: 'comida',
+      imageUrl: null,
+    });
+    expect(photoDetails[0]?.isVerifiedReal).toBe(true);
+    expect(photoDetails[0]?.authorName).toBe('Mario Silva');
+    expect(photoDetails[0]?.url).toContain('https://places.googleapis.com/v1/');
+
+    // Verificación de URL con origen explícito y nombre comercial en Tegucigalpa
+    const routeUrl = buildGoogleMapsUrl(14.0869, -87.1743, {
+      name: '1. El Morito – La Hacienda',
+      addressText: 'Boulevard La Hacienda',
+      cityName: 'Tegucigalpa',
+      origin: 'Colonia Florencia Norte, Tegucigalpa, Honduras',
+    });
+    expect(routeUrl).toContain('origin=Colonia%20Florencia%20Norte%2C%20Tegucigalpa%2C%20Honduras');
+    expect(routeUrl).toContain('destination=El%20Morito%20%E2%80%93%20La%20Hacienda%2C%20Boulevard%20La%20Hacienda%2C%20Tegucigalpa%2C%20Honduras');
   });
 });
+

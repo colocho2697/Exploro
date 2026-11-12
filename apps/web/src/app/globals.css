@@ -1,37 +1,51 @@
 :root {
-  /* Paleta Premium Exploro: Airbnb Editorial (Blanco Puro) + Duolingo Tactile */
+  /* Paleta Oficial Exploro: Editorial Blanco Puro (#FFFFFF) + Esmeralda Duolingo Tactile (#10B981) + Cobalto Rutas (#0284C7) */
   --bg-primary: #ffffff;
-  --bg-secondary: #f7f7f9;
+  --bg-secondary: #f8fafc;
   --bg-card: #ffffff;
-  --bg-card-hover: #fafafa;
-  --text-primary: #222222;
-  --text-secondary: #717171;
-  --text-muted: #8c8c8c;
+  --bg-card-hover: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
 
-  /* Airbnb Rausch Coral (Primario) */
-  --brand-coral: #ff385c;
-  --brand-coral-dark: #e00b41;
-  --brand-gradient: linear-gradient(135deg, #ff385c 0%, #e61e4d 50%, #d70466 100%);
+  /* Exploro Emerald (Primario Acción & "Ir ahora" con tacto 3D estilo Duolingo) */
+  --brand-emerald: #10b981;
+  --brand-emerald-dark: #059669;
+  --brand-emerald-lip: #047857;
+  --brand-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --brand-primary: #10b981;
 
-  /* Acentos Táctiles Duolingo */
-  --duo-green: #58cc02;
-  --duo-green-lip: #46a302;
-  --duo-blue: #1cb0f6;
-  --duo-blue-lip: #1899d6;
-  --duo-gold: #ffc800;
-  --duo-orange: #ff9600;
+  /* Exploro Cobalt (Rutas, Mapa y GPS) */
+  --brand-cobalt: #0284c7;
+  --brand-cobalt-light: #38bdf8;
+  --brand-cobalt-lip: #0369a1;
 
-  /* Compatibilidad con variables previas */
-  --accent: #ff385c;
-  --accent-emerald: #16a34a;
+  /* Exploro Amber Gold (Ranking #1, Medallas y Estrellas) */
+  --brand-gold: #f59e0b;
+  --brand-gold-dark: #d97706;
+
+  /* Acentos Táctiles */
+  --duo-green: #10b981;
+  --duo-green-lip: #047857;
+  --duo-blue: #0284c7;
+  --duo-blue-lip: #0369a1;
+  --duo-gold: #f59e0b;
+  --duo-orange: #f97316;
+
+  /* Compatibilidad con tokens previos */
+  --brand-coral: #10b981;
+  --brand-coral-dark: #059669;
+  --accent: #10b981;
+  --accent-emerald: #10b981;
   --accent-sky: #0284c7;
   --accent-indigo: #4f46e5;
-  --accent-amber: #d97706;
-  --accent-rose: #ff385c;
+  --accent-amber: #f59e0b;
+  --accent-rose: #f43f5e;
   --border-subtle: #ebebeb;
-  --border-tactile: #e5e5e5;
-  --border-glow: #222222;
+  --border-tactile: #e2e8f0;
+  --border-glow: #0f172a;
 }
+
 
 * {
   box-sizing: border-box;
@@ -92,18 +106,19 @@ button:disabled {
 
 .btn-primary {
   background: var(--brand-gradient);
-  border: 1.5px solid #d70466;
-  border-bottom: 3px solid #b00352;
+  border: 1.5px solid #059669;
+  border-bottom: 3.5px solid #047857;
   color: #ffffff;
   font-weight: 800;
-  box-shadow: 0 4px 14px rgba(255, 56, 92, 0.25);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
 }
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #ff4d6d 0%, #e61e4d 100%);
-  border-color: #b00352;
+  background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+  border-color: #047857;
   color: #ffffff;
-  box-shadow: 0 6px 20px rgba(255, 56, 92, 0.35);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.38);
 }
+
 
 .btn-duo-green {
   background: var(--duo-green);
@@ -383,10 +398,11 @@ button:disabled {
 .airbnb-ir-ahora-btn {
   background: var(--brand-gradient);
   color: #ffffff;
-  border: none;
+  border: 1.5px solid #059669;
+  border-bottom: 4px solid #047857;
   border-radius: 999px;
-  padding: 0.9rem 2.2rem;
-  font-size: 1.02rem;
+  padding: 0.85rem 2.2rem;
+  font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: -0.01em;
   text-decoration: none;
@@ -394,13 +410,18 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  box-shadow: 0 6px 20px rgba(255, 56, 92, 0.35);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.32);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 .airbnb-ir-ahora-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(255, 56, 92, 0.45);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.42);
 }
+.airbnb-ir-ahora-btn:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
 
 .switch {
   display: inline-flex;

@@ -8,6 +8,7 @@ import {
   Coordinates,
   SurpriseMeResponse,
 } from '@exploro/shared-types';
+import { buildGoogleMapsUrl, computeMultiSourceScore, getPlacePhotoGallery } from '../lib/format';
 
 interface Props {
   client: ExploroApiClient;
@@ -64,8 +65,14 @@ export function SurpriseMe({ client, coords, citySlug, radiusKm, applyPreference
   };
 
   return (
-    <section className="card" style={{ padding: '1rem', display: 'grid', gap: '.8rem' }} aria-label="Sorpréndeme">
-      <h2 style={{ fontSize: '1.15rem', fontWeight: 700 }}>✨ Sorpréndeme</h2>
+    <section className="card" style={{ padding: '1.15rem', display: 'grid', gap: '.85rem' }} aria-label="Sorpréndeme">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.4rem' }}>
+        <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#222222' }}>🎲 Sorpréndeme cerca de mí</h2>
+        <span style={{ fontSize: '.78rem', color: '#717171', fontWeight: 600 }}>
+          Basado en presupuesto, tiempo y puntaje Maps + Reddit + Redes
+        </span>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '.6rem' }}>
         <label>
           <span className="sr-only">Presupuesto</span>
@@ -85,43 +92,74 @@ export function SurpriseMe({ client, coords, citySlug, radiusKm, applyPreference
             {COMPANIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </label>
-        <button type="button" className="btn btn-primary" onClick={run} disabled={busy}>
-          {busy ? 'Buscando…' : 'Sorpréndeme'}
+        <button type="button" className="btn btn-primary" onClick={run} disabled={busy} style={{ justifyContent: 'center' }}>
+          {busy ? 'Buscando…' : '✨ Sorpréndeme'}
         </button>
       </div>
-      <p style={{ fontSize: '.78rem', color: 'var(--text-secondary)' }}>
-        {coords ? 'Usando tu ubicación.' : citySlug ? 'Usando la ciudad seleccionada.' : 'Sin ubicación ni ciudad: se consideran todos los destinos.'}
-      </p>
 
       {error && <div role="alert" className="alert alert-error">{error}</div>}
       {result?.notice && <div role="status" className="alert alert-info">{result.notice}</div>}
 
       {result && result.suggestions.length > 0 && (
-        <ol style={{ display: 'grid', gap: '.7rem', listStyle: 'none' }}>
-          {result.suggestions.map((s) => (
-            <li key={s.place.id} className="card" style={{ padding: '.8rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}>
-                <strong>{s.place.name}</strong>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '.8rem' }}>
-                  {s.place.cityName}{s.place.stateCode ? `, ${s.place.stateCode}` : ''}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', margin: '.35rem 0' }}>
-                {s.place.isDemoData && <span className="badge badge-demo">Demostración</span>}
-                {s.budgetFit !== 'CONFIRMED' && <span className="badge badge-warn">Precio sin verificar</span>}
-                {s.timeFit !== 'CONFIRMED' && <span className="badge badge-warn">Duración sin verificar</span>}
-              </div>
-              <ul style={{ paddingLeft: '1.1rem', fontSize: '.83rem', color: 'var(--text-secondary)' }}>
-                {s.reasons.map((r) => <li key={r}>{r}</li>)}
-                {s.estimatedTravelMinutes !== null && (
-                  <li>Traslado estimado: ~{s.estimatedTravelMinutes} min (estimación en línea recta, no una ruta)</li>
-                )}
-              </ul>
-            </li>
-          ))}
+        <ol style={{ display: 'grid', gap: '.75rem', listStyle: 'none' }}>
+          {result.suggestions.map((s) => {
+            const score = computeMultiSourceScore(s.place);
+            const photo = getPlacePhotoGallery(s.place)[0]!;
+            const cleanTitle = s.place.name.replace(/^\d+\.\s*/, '');
+            return (
+              <li
+                key={s.place.id}
+                className="card"
+                style={{
+                  padding: '.85rem',
+                  display: 'flex',
+                  gap: '.9rem',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '.85rem', alignItems: 'center', flex: '1 1 280px' }}>
+                  <img
+                    src={photo}
+                    alt={cleanTitle}
+                    style={{ width: 76, height: 76, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: '#222222' }}>
+                      {cleanTitle} · ★ {score.mapsStars} ({score.totalScore}/100 pts)
+                    </div>
+                    <div style={{ color: '#717171', fontSize: '.8rem', marginTop: 2 }}>
+                      {s.place.addressText ?? s.place.cityName}
+                    </div>
+                    <ul style={{ paddingLeft: '1rem', fontSize: '.8rem', color: '#222222', marginTop: 4 }}>
+                      {s.reasons.map((r) => <li key={r}>{r}</li>)}
+                    </ul>
+                  </div>
+                </div>
+
+                <a
+                  href={buildGoogleMapsUrl(s.place.coordinates.lat, s.place.coordinates.lng, {
+                    name: cleanTitle,
+                    addressText: s.place.addressText,
+                    cityName: s.place.cityName,
+                    origin: coords
+                      ? `${coords.lat},${coords.lng}`
+                      : 'Colonia Florencia Norte, Tegucigalpa, Honduras',
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="airbnb-ir-ahora-btn"
+                  style={{ padding: '.6rem 1.35rem', fontSize: '.88rem' }}
+                >
+                  Ir ahora
+                </a>
+
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>
   );
 }
-

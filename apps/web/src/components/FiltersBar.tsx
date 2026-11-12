@@ -114,9 +114,10 @@ export function FiltersBar({
         setLocating(false);
         setLocationError(geolocationMessage(err));
       },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 }
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 }
     );
   };
+
 
   const handleCityReferenceChange = (slug: string): void => {
     if (!slug) {
@@ -317,9 +318,10 @@ export function FiltersBar({
                       <div style={{ fontWeight: 700 }}>{sug.title}</div>
                       <div style={{ color: '#717171', fontSize: '.75rem' }}>{sug.subtitle}</div>
                     </div>
-                    <span style={{ fontSize: '.75rem', color: '#FF385C', fontWeight: 700 }}>
+                    <span style={{ fontSize: '.75rem', color: '#0284c7', fontWeight: 700 }}>
                       {sug.type === 'city' ? 'Ciudad' : 'Lugar'}
                     </span>
+
                   </button>
                 </li>
               ))}

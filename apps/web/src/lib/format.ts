@@ -1,6 +1,8 @@
 import { PlaceCardDTO } from '@exploro/shared-types';
+import { GOOGLE_PLACES_PHOTOS } from './google-places-photos';
 
 export const KM_PER_MILE = 1.609344;
+
 
 /** Radio inicial por defecto en el mapa: 5 km a la redonda. */
 export const DEFAULT_RADIUS_KM = 5;
@@ -41,15 +43,55 @@ export function formatDistanceUS(meters: number | null): string | null {
   return `${miles.toFixed(miles < 10 ? 1 : 0)} mi`;
 }
 
-/** Enlace universal directo y gratuito ($0.00) para iniciar navegación en Waze. */
-export function buildWazeUrl(lat: number, lng: number): string {
+/** Opciones enriquecidas para iniciar navegación directa y precisa. */
+export interface NavigationOptions {
+  name?: string;
+  addressText?: string | null;
+  cityName?: string | null;
+  origin?: string | null;
+}
+
+/** Enlace universal directo y gratuito ($0.00) para iniciar navegación en Waze con búsqueda precisa del local. */
+export function buildWazeUrl(
+  lat: number,
+  lng: number,
+  options?: { name?: string; cityName?: string }
+): string {
+  if (options?.name) {
+    const cleanName = options.name.replace(/^#?\d+[\.\s\-—]+/, '').trim();
+    const query = `${cleanName} ${options.cityName ?? 'Tegucigalpa'}, Honduras`;
+    return `https://waze.com/ul?q=${encodeURIComponent(query)}&ll=${lat},${lng}&navigate=yes`;
+  }
   return `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
 }
 
-/** Enlace universal directo y gratuito ($0.00) para iniciar ruta en Google Maps. */
-export function buildGoogleMapsUrl(lat: number, lng: number): string {
+/** Enlace universal directo y gratuito ($0.00) para iniciar ruta en Google Maps con origen y destino exactos. */
+export function buildGoogleMapsUrl(
+  lat: number,
+  lng: number,
+  options?: NavigationOptions
+): string {
+  if (options?.name) {
+    const cleanName = options.name.replace(/^#?\d+[\.\s\-—]+/, '').trim();
+    const destinationParts = [cleanName];
+    if (options.addressText) destinationParts.push(options.addressText);
+    if (options.cityName) destinationParts.push(options.cityName);
+    destinationParts.push('Honduras');
+    const destinationQuery = destinationParts.join(', ');
+
+    if (options.origin) {
+      return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+        options.origin
+      )}&destination=${encodeURIComponent(destinationQuery)}&travelmode=driving`;
+    }
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+      destinationQuery
+    )}&travelmode=driving`;
+  }
+
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
 }
+
 
 export interface ParsedRecommendation {
   choiceReason: string;
@@ -276,16 +318,61 @@ const CATEGORY_DEFAULT_GALLERIES: Record<string, string[]> = {
   ],
 };
 
-export function getPlacePhotoGallery(
+export interface PlacePhotoInfo {
+  url: string;
+  authorName: string;
+  authorUri: string | null;
+  isVerifiedReal: boolean;
+}
+
+const GOOGLE_PLACES_API_KEY =
+  (typeof process !== 'undefined' &&
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) ||
+  'AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U';
+
+/**
+ * Obtiene la galería con información de verificación real y atribución de autor.
+ * - Si existen fotos reales en Google Places API, usa las oficiales con su autor.
+ * - Si es una foto de catálogo ilustrativa, lo marca honestamente como no verificada.
+ */
+export function getPlacePhotoDetails(
   place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'>
-): string[] {
+): PlacePhotoInfo[] {
+  const gPhotos = GOOGLE_PLACES_PHOTOS[place.slug];
+  if (gPhotos && gPhotos.length > 0) {
+    return gPhotos.map((gp) => ({
+      url: `https://places.googleapis.com/v1/${gp.photoName}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_PLACES_API_KEY}`,
+      authorName: gp.authorName,
+      authorUri: gp.authorUri,
+      isVerifiedReal: true,
+    }));
+  }
+
   const custom = SLUG_GALLERIES[place.slug];
-  if (custom && custom.length > 0) return custom;
+  if (custom && custom.length > 0) {
+    return custom.map((url) => ({
+      url,
+      authorName: 'Fotografía gastronómica referencial',
+      authorUri: null,
+      isVerifiedReal: false,
+    }));
+  }
+
   const fallback =
     CATEGORY_DEFAULT_GALLERIES[place.categorySlug] ??
     CATEGORY_DEFAULT_GALLERIES.comida!;
-  if (place.imageUrl) {
-    return [place.imageUrl, ...fallback.slice(0, 3)];
-  }
-  return fallback;
+  const urls = place.imageUrl ? [place.imageUrl, ...fallback.slice(0, 3)] : fallback;
+  return urls.map((url) => ({
+    url,
+    authorName: 'Fotografía referencial de la especialidad',
+    authorUri: null,
+    isVerifiedReal: false,
+  }));
 }
+
+export function getPlacePhotoGallery(
+  place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'>
+): string[] {
+  return getPlacePhotoDetails(place).map((p) => p.url);
+}
+

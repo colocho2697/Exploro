@@ -87,8 +87,19 @@ export default function MapView({
       el.textContent = String(rankNum);
       el.style.cssText = `width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:${color};color:#fff;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;box-shadow:0 2px 6px rgba(0,0,0,0.45);`;
       el.addEventListener('click', () => onSelectPlace(place.slug));
-      const wazeUrl = buildWazeUrl(place.coordinates.lat, place.coordinates.lng);
-      const gmapsUrl = buildGoogleMapsUrl(place.coordinates.lat, place.coordinates.lng);
+      const wazeUrl = buildWazeUrl(place.coordinates.lat, place.coordinates.lng, {
+        name: place.name,
+        cityName: place.cityName,
+      });
+      const gmapsUrl = buildGoogleMapsUrl(place.coordinates.lat, place.coordinates.lng, {
+        name: place.name,
+        addressText: place.addressText,
+        cityName: place.cityName,
+        origin: userLocation
+          ? `${userLocation.lat},${userLocation.lng}`
+          : 'Colonia Florencia Norte, Tegucigalpa, Honduras',
+      });
+
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([place.coordinates.lng, place.coordinates.lat])
         .setPopup(

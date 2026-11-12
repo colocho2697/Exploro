@@ -60,11 +60,12 @@ export function PlaceCard({
         className="airbnb-place-card"
         onClick={() => setOpenDetail(true)}
         style={{
-          borderColor: highlight ? '#FF385C' : '#ebebeb',
+          borderColor: highlight ? '#10b981' : '#ebebeb',
           boxShadow: highlight
-            ? '0 0 0 2.5px #FF385C, 0 12px 28px rgba(255, 56, 92, 0.16)'
+            ? '0 0 0 2.5px #10b981, 0 12px 28px rgba(16, 185, 129, 0.16)'
             : undefined,
         }}
+
       >
         {/* Imagen superior estilo Airbnb con badges flotantes */}
         <div
@@ -102,8 +103,8 @@ export function PlaceCard({
             {rank !== undefined && (
               <span
                 style={{
-                  background: rank === 1 ? '#FFC800' : 'rgba(255, 255, 255, 0.95)',
-                  color: '#222222',
+                  background: rank === 1 ? '#f59e0b' : 'rgba(255, 255, 255, 0.95)',
+                  color: rank === 1 ? '#ffffff' : '#222222',
                   padding: '4px 10px',
                   borderRadius: 999,
                   fontSize: '.75rem',
@@ -114,6 +115,7 @@ export function PlaceCard({
                 {rank === 1 ? '🏆 #1 Favorito' : `#${rank}`}
               </span>
             )}
+
             <span
               style={{
                 background: 'rgba(34, 34, 34, 0.86)',
@@ -147,8 +149,9 @@ export function PlaceCard({
               borderRadius: '50%',
               background: 'rgba(255, 255, 255, 0.92)',
               border: 'none',
-              color: isFavorite ? '#FF385C' : '#222222',
+              color: isFavorite ? '#ef4444' : '#222222',
               fontSize: '1.1rem',
+
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -289,7 +292,7 @@ export function PlaceCard({
               style={{
                 fontSize: '.82rem',
                 fontWeight: 800,
-                color: '#FF385C',
+                color: '#10b981',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 4,
@@ -297,6 +300,7 @@ export function PlaceCard({
             >
               Ver detalles →
             </span>
+
           </div>
         </div>
       </article>

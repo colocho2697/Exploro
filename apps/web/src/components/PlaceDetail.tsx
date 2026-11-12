@@ -13,9 +13,10 @@ import {
   buildWazeUrl,
   computeMultiSourceScore,
   formatDistanceKm,
-  getPlacePhotoGallery,
+  getPlacePhotoDetails,
   parseRecommendationReason,
 } from '../lib/format';
+
 
 const TIME_OF_DAY: Record<string, string> = {
   MORNING: 'Mañana',
@@ -39,7 +40,9 @@ interface PlaceDetailProps {
   onToggleFavorite?: () => void;
   onClose?: () => void;
   onCalculateRoute?: (coords: { lat: number; lng: number }, name: string) => void;
+  userOrigin?: string | null;
 }
+
 
 function getCategorySubtitleLines(
   place: Pick<
@@ -152,6 +155,7 @@ export function PlaceDetail({
   onToggleFavorite,
   onClose,
   onCalculateRoute: _onCalculateRoute,
+  userOrigin,
 }: PlaceDetailProps): React.JSX.Element {
   const [detail, setDetail] = useState<PlaceDetailDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -209,23 +213,36 @@ export function PlaceDetail({
     );
   }
 
-  const photos = getPlacePhotoGallery(activePlace);
-  const currentPhoto = photos[photoIndex] ?? photos[0]!;
+  const photoDetails = getPlacePhotoDetails(activePlace);
+  const currentPhotoInfo = photoDetails[photoIndex] ?? photoDetails[0]!;
+  const currentPhoto = currentPhotoInfo.url;
+  const photos = photoDetails.map((p) => p.url);
   const score = computeMultiSourceScore(activePlace);
   const parsedReason = parseRecommendationReason(activePlace.recommendationReason);
   const distanceLabel = formatDistanceKm(activePlace.distanceMeters);
   const catInfo = getCategorySubtitleLines(activePlace, detail);
   const cleanTitle = activePlace.name.replace(/^\d+\.\s*/, '');
 
-  // URL de navegación directa para el botón simple «Ir ahora»
+  // URL de navegación directa precisa con origen y destino exactos para el botón principal «Ir ahora»
   const googleMapsUrl = buildGoogleMapsUrl(
     activePlace.coordinates.lat,
-    activePlace.coordinates.lng
+    activePlace.coordinates.lng,
+    {
+      name: cleanTitle,
+      addressText: activePlace.addressText,
+      cityName: activePlace.cityName,
+      origin: userOrigin ?? 'Colonia Florencia Norte, Tegucigalpa, Honduras',
+    }
   );
   const wazeUrl = buildWazeUrl(
     activePlace.coordinates.lat,
-    activePlace.coordinates.lng
+    activePlace.coordinates.lng,
+    {
+      name: cleanTitle,
+      cityName: activePlace.cityName,
+    }
   );
+
 
   const handleShare = (): void => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -371,7 +388,7 @@ export function PlaceDetail({
                   className="airbnb-circle-icon-btn"
                   onClick={onToggleFavorite}
                   aria-label="Guardar en favoritos"
-                  style={{ color: isFavorite ? '#FF385C' : '#222222' }}
+                  style={{ color: isFavorite ? '#ef4444' : '#222222' }}
                 >
                   {isFavorite ? '♥' : '♡'}
                 </button>
@@ -429,7 +446,40 @@ export function PlaceDetail({
             </>
           )}
 
-          {/* Contador de fotos esquina inferior derecha (idéntico al "4 / 25" de Airbnb) */}
+          {/* Badge transparente con origen real de la foto y atribución legal de autor (§ 3.2.3 TOS Google Maps) */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 38,
+              left: 16,
+              background: 'rgba(15, 23, 42, 0.82)',
+              color: '#ffffff',
+              padding: '4px 10px',
+              borderRadius: 8,
+              fontSize: '.72rem',
+              fontWeight: 600,
+              backdropFilter: 'blur(6px)',
+              maxWidth: 'calc(100% - 95px)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {currentPhotoInfo.isVerifiedReal ? (
+              <span>
+                📷 Google Maps · {currentPhotoInfo.authorName}
+              </span>
+            ) : (
+              <span>
+                📷 Foto ilustrativa · Sube una real
+              </span>
+            )}
+          </div>
+
+          {/* Contador de fotos esquina inferior derecha */}
           <div
             style={{
               position: 'absolute',
@@ -474,7 +524,7 @@ export function PlaceDetail({
                   overflow: 'hidden',
                   border:
                     idx === photoIndex
-                      ? '2.5px solid #FF385C'
+                      ? '2.5px solid #10b981'
                       : '1px solid #e5e5e5',
                   padding: 0,
                   opacity: idx === photoIndex ? 1 : 0.65,
@@ -488,6 +538,7 @@ export function PlaceDetail({
               </button>
             ))}
           </div>
+
 
           {/* Título centrado + Subtítulo adaptado a la categoría + Línea ★ y reseñas */}
           <div style={{ textAlign: 'center', display: 'grid', gap: '.4rem' }}>
@@ -552,7 +603,7 @@ export function PlaceDetail({
                 width: 48,
                 height: 48,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #FF385C 0%, #FF9600 100%)',
+                background: 'linear-gradient(135deg, #10b981 0%, #0284c7 100%)',
                 color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
@@ -561,7 +612,8 @@ export function PlaceDetail({
                 fontWeight: 800,
                 flexShrink: 0,
                 position: 'relative',
-                boxShadow: '0 4px 12px rgba(255, 56, 92, 0.25)',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+
               }}
             >
               🏆

@@ -82,10 +82,11 @@ const CATEGORY_VISUALS: Record<
 > = {
   comida: {
     emoji: '🍕',
-    accent: '#FF385C',
-    bg: '#fff1f2',
+    accent: '#10B981',
+    bg: '#ecfdf5',
     shortDesc: 'Mariscos, pizzerías, hamburguesas, sushi, cafés y alitas (Top verificados)',
   },
+
   turismo: {
     emoji: '🧭',
     accent: '#1CB0F6',
@@ -200,23 +201,29 @@ export default function ExploroHomePage(): React.JSX.Element {
     if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setFilterValues((prev) => ({
-            ...prev,
-            coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-            radiusKm: DEFAULT_RADIUS_KM,
-            unbounded: false,
-            sortBy: 'recommended',
-          }));
-          setGpsStatus('Ubicación GPS activa (5 km)');
+          const isAccurate = pos.coords.accuracy <= 3000;
+          if (isAccurate) {
+            setFilterValues((prev) => ({
+              ...prev,
+              coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+              radiusKm: DEFAULT_RADIUS_KM,
+              unbounded: false,
+              sortBy: 'recommended',
+            }));
+            setGpsStatus(`GPS Activo (±${Math.round(pos.coords.accuracy)}m)`);
+          } else {
+            setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
+          }
         },
         () => {
           setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
         },
-        { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
       );
     } else {
       setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
     }
+
   }, [session.client]);
 
   useEffect(() => {
@@ -369,22 +376,23 @@ export default function ExploroHomePage(): React.JSX.Element {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#222222' }}>
-            Exploro<span style={{ color: '#FF385C' }}>.</span>
+          <span style={{ fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#0f172a' }}>
+            Exploro<span style={{ color: '#10B981' }}>.</span>
           </span>
           <span
             className="badge"
-            style={{ background: '#fff1f2', color: '#FF385C', border: '1px solid #ffe4e6' }}
+            style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}
           >
             ✈️ Viajero
           </span>
           <span
             className="badge"
-            style={{ background: '#ecfdf5', color: '#15803d', border: '1px solid #bbf7d0' }}
+            style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}
           >
             📍 {gpsStatus}
           </span>
         </div>
+
 
         <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {session.user ? (
@@ -868,22 +876,23 @@ export default function ExploroHomePage(): React.JSX.Element {
                           textAlign: 'left',
                           padding: '.55rem .75rem',
                           borderRadius: 12,
-                          background: active ? '#fff1f2' : '#f7f7f9',
+                          background: active ? '#ecfdf5' : '#f8fafc',
                           border: active
-                            ? '2px solid #FF385C'
-                            : '1.5px solid #e5e5e5',
+                            ? '2px solid #10B981'
+                            : '1.5px solid #e2e8f0',
                           borderBottomWidth: 3,
-                          color: '#222222',
+                          color: '#0f172a',
                           cursor: 'pointer',
                         }}
                       >
-                        <div style={{ fontSize: '.72rem', color: '#717171', fontWeight: 600 }}>
+                        <div style={{ fontSize: '.72rem', color: '#64748b', fontWeight: 600 }}>
                           {pick.craving}
                         </div>
-                        <div style={{ fontSize: '.86rem', fontWeight: 800, color: '#FF385C' }}>
+                        <div style={{ fontSize: '.86rem', fontWeight: 800, color: '#10B981' }}>
                           → {pick.placeLabel}
                         </div>
                       </button>
+
                     );
                   })}
                 </div>

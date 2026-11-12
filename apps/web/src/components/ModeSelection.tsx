@@ -39,9 +39,9 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
           <span
             className="badge"
             style={{
-              background: '#fff1f2',
-              color: '#FF385C',
-              border: '1.5px solid #ffe4e6',
+              background: '#ecfdf5',
+              color: '#059669',
+              border: '1.5px solid #a7f3d0',
               padding: '.35rem .85rem',
             }}
           >
@@ -59,8 +59,9 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
             marginBottom: '.5rem',
           }}
         >
-          Exploro<span style={{ color: '#FF385C' }}>.</span>
+          Exploro<span style={{ color: '#10b981' }}>.</span>
         </h1>
+
         <p
           style={{
             color: '#717171',
@@ -94,7 +95,7 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
                   opacity: m.enabled ? 1 : 0.65,
                   borderStyle: m.enabled ? 'solid' : 'dashed',
                   borderColor: m.enabled ? '#e5e5e5' : '#d4d4d8',
-                  borderBottomColor: m.enabled ? '#FF385C' : '#d4d4d8',
+                  borderBottomColor: m.enabled ? '#10b981' : '#d4d4d8',
                   background: '#ffffff',
                   minHeight: 185,
                 }}
@@ -112,8 +113,8 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
                       className="category-card-icon"
                       style={{
                         marginBottom: 0,
-                        background: isTraveler ? '#fff1f2' : '#f4f4f5',
-                        borderColor: isTraveler ? '#fecdd3' : '#e4e4e7',
+                        background: isTraveler ? '#ecfdf5' : '#f4f4f5',
+                        borderColor: isTraveler ? '#a7f3d0' : '#e4e4e7',
                       }}
                     >
                       {isTraveler ? '✈️' : '🏠'}
@@ -145,13 +146,14 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
                     marginTop: '1.1rem',
                     fontWeight: 800,
                     fontSize: '.9rem',
-                    color: m.enabled ? '#FF385C' : '#717171',
+                    color: m.enabled ? '#10b981' : '#717171',
                   }}
                 >
                   {m.enabled
                     ? 'Elegir categoría →'
                     : 'Próximamente disponible'}
                 </div>
+
               </button>
             );
           })}
