@@ -149,3 +149,4 @@ export const GOOGLE_PLACES_PHOTOS: Record<string, GooglePlacePhotoDef[]> = ${JSO
 }
 
 main().catch(console.error);
+

@@ -249,6 +249,27 @@ export default function ExploroHomePage(): React.JSX.Element {
     }
   }, []);
 
+  const handleMapSelectCoordinates = useCallback((coords: Coordinates) => {
+    setFilterValues((prev) => ({
+      ...prev,
+      coords,
+      citySlug: '',
+      unbounded: false,
+    }));
+    setGpsStatus(`Punto marcado (${filterValues.radiusKm} km)`);
+  }, [filterValues.radiusKm]);
+
+  const handleMapRadiusChange = useCallback((radiusKm: number) => {
+    setFilterValues((prev) => ({
+      ...prev,
+      radiusKm,
+      unbounded: false,
+    }));
+    setGpsStatus((prev) =>
+      prev.includes('(') ? prev.replace(/\(\d+\s*km\)/, `(${radiusKm} km)`) : `${prev} (${radiusKm} km)`
+    );
+  }, []);
+
   const displayedPlaces = useMemo(() => {
     if (selectedCraving === 'TODOS') return discovery.places;
     return discovery.places.filter((p) => {
@@ -997,7 +1018,12 @@ export default function ExploroHomePage(): React.JSX.Element {
                 userLocation={filterValues.coords}
                 fallbackCenter={mapCenter}
                 activeRoute={activeRoute}
+                radiusKm={filterValues.radiusKm}
+                unbounded={filterValues.unbounded}
                 onSelectPlace={focusPlace}
+                onSelectCoordinates={handleMapSelectCoordinates}
+                onRadiusChange={handleMapRadiusChange}
+                onResetToGps={handleRequestGps}
               />
 
               <div>

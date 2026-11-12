@@ -12,7 +12,12 @@ interface Props {
   userLocation: Coordinates | null;
   fallbackCenter: Coordinates | null;
   activeRoute?: RouteSummary | null;
+  radiusKm?: number;
+  unbounded?: boolean;
   onSelectPlace: (slug: string) => void;
+  onSelectCoordinates?: (coords: Coordinates) => void;
+  onRadiusChange?: (radiusKm: number) => void;
+  onResetToGps?: () => void;
 }
 
 const US_CENTER: Coordinates = { lat: 39.5, lng: -98.35 };
@@ -26,29 +31,68 @@ const CATEGORY_COLORS: Record<string, string> = {
   compras: '#eab308',
 };
 
-/** Mapa MapLibre GL con estilo OpenFreeMap (OpenStreetMap): sin API key ni costo. */
+/** Genera un polígono GeoJSON circular para el radio estilo Facebook Marketplace */
+function createGeoJSONCircle(
+  center: [number, number],
+  radiusInKm: number,
+  points = 64
+) {
+  const [lng, lat] = center;
+  const coords: [number, number][] = [];
+  const distanceX = radiusInKm / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const distanceY = radiusInKm / 110.574;
+
+  for (let i = 0; i < points; i++) {
+    const theta = (i / points) * (2 * Math.PI);
+    const x = distanceX * Math.cos(theta);
+    const y = distanceY * Math.sin(theta);
+    coords.push([lng + x, lat + y]);
+  }
+  coords.push(coords[0]!);
+
+  return {
+    type: 'Feature' as const,
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: [coords],
+    },
+    properties: {},
+  };
+}
+
+/** Mapa MapLibre GL interactivo con radio dinámico estilo Facebook Marketplace */
 export default function MapView({
   places,
   userLocation,
   fallbackCenter,
   activeRoute,
+  radiusKm = 5,
+  unbounded = false,
   onSelectPlace,
+  onSelectCoordinates,
+  onRadiusChange,
+  onResetToGps,
 }: Props): React.JSX.Element {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [isPinMode, setIsPinMode] = useState(true);
+
+  const onSelectCoordinatesRef = useRef(onSelectCoordinates);
+  onSelectCoordinatesRef.current = onSelectCoordinates;
 
   useEffect(() => {
     if (!container.current || mapRef.current) return;
     try {
-      const start = fallbackCenter ?? US_CENTER;
+      const start = userLocation ?? fallbackCenter ?? US_CENTER;
       const map = new maplibregl.Map({
         container: container.current,
         style: MAP_STYLE_URL,
         center: [start.lng, start.lat],
-        zoom: fallbackCenter ? 10 : 3,
+        zoom: fallbackCenter || userLocation ? 11 : 4,
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
       map.on('load', () => setReady(true));
@@ -62,21 +106,130 @@ export default function MapView({
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      centerMarkerRef.current?.remove();
+      centerMarkerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };
-    // El mapa se crea una sola vez; los marcadores se actualizan en el efecto siguiente.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Manejador interactivo de clic en el mapa para mover el radio (estilo Marketplace)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    if (isPinMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+    } else {
+      map.getCanvas().style.cursor = '';
+    }
+
+    const handleMapClick = (e: maplibregl.MapMouseEvent) => {
+      if (!isPinMode || !onSelectCoordinatesRef.current) return;
+      onSelectCoordinatesRef.current({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+    };
+
+    map.on('click', handleMapClick);
+    return () => {
+      map.off('click', handleMapClick);
+    };
+  }, [ready, isPinMode]);
+
+  // Actualización de marcadores, centro y círculo de radio
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
 
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
-    const bounds = new maplibregl.LngLatBounds();
+    centerMarkerRef.current?.remove();
+    centerMarkerRef.current = null;
 
+    const bounds = new maplibregl.LngLatBounds();
+    const centerPoint = userLocation ?? fallbackCenter;
+
+    // 1. CÍRCULO TRANSLÚCIDO DE RADIO ESTILO FACEBOOK MARKETPLACE
+    try {
+      if (centerPoint && radiusKm && !unbounded) {
+        const circleData = createGeoJSONCircle(
+          [centerPoint.lng, centerPoint.lat],
+          radiusKm
+        );
+        const source = map.getSource('search-radius-src') as maplibregl.GeoJSONSource | undefined;
+        if (source) {
+          source.setData(circleData as any);
+        } else {
+          map.addSource('search-radius-src', {
+            type: 'geojson',
+            data: circleData as any,
+          });
+          map.addLayer({
+            id: 'search-radius-fill',
+            type: 'fill',
+            source: 'search-radius-src',
+            paint: {
+              'fill-color': '#10b981',
+              'fill-opacity': 0.14,
+            },
+          });
+          map.addLayer({
+            id: 'search-radius-stroke',
+            type: 'line',
+            source: 'search-radius-src',
+            paint: {
+              'line-color': '#059669',
+              'line-width': 2.5,
+              'line-dasharray': [3, 2],
+            },
+          });
+        }
+      } else {
+        if (map.getLayer('search-radius-fill')) map.removeLayer('search-radius-fill');
+        if (map.getLayer('search-radius-stroke')) map.removeLayer('search-radius-stroke');
+        if (map.getSource('search-radius-src')) map.removeSource('search-radius-src');
+      }
+    } catch {
+      // Ignora errores puntuales de recarga de capas en WebGL
+    }
+
+    // 2. PIN CENTRAL DEL RADIO (Arrastrable y con pulsación)
+    if (centerPoint) {
+      const centerEl = document.createElement('div');
+      centerEl.style.cursor = onSelectCoordinates ? 'grab' : 'default';
+      centerEl.title = 'Arrastra o toca en el mapa para mover el radio';
+      centerEl.innerHTML = `
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+          <div style="position:absolute;width:38px;height:38px;border-radius:50%;background:rgba(16,185,129,0.28);border:1.5px solid rgba(16,185,129,0.5);"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:#10b981;border:3px solid #ffffff;box-shadow:0 3px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:900;">📍</div>
+        </div>
+      `;
+
+      const centerMarker = new maplibregl.Marker({
+        element: centerEl,
+        draggable: Boolean(onSelectCoordinates),
+      })
+        .setLngLat([centerPoint.lng, centerPoint.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 16 }).setHTML(
+            `<div style="font-size:12px;font-weight:700;color:#0f172a;padding:2px 4px;">
+              📍 Centro de búsqueda (${radiusKm} km)
+              <div style="font-size:11px;font-weight:500;color:#64748b;margin-top:2px;">Arrastra o haz clic en cualquier punto del mapa para mover</div>
+            </div>`
+          )
+        )
+        .addTo(map);
+
+      if (onSelectCoordinates) {
+        centerMarker.on('dragend', () => {
+          const lngLat = centerMarker.getLngLat();
+          onSelectCoordinates({ lat: lngLat.lat, lng: lngLat.lng });
+        });
+      }
+      centerMarkerRef.current = centerMarker;
+      bounds.extend([centerPoint.lng, centerPoint.lat]);
+    }
+
+    // 3. MARCADORES DE LUGARES ENCONTRADOS DENTRO DEL RADIO
     for (let idx = 0; idx < places.length; idx++) {
       const place = places[idx]!;
       const rankNum = idx + 1;
@@ -86,7 +239,12 @@ export default function MapView({
       el.setAttribute('aria-label', `Ver ${place.name}`);
       el.textContent = String(rankNum);
       el.style.cssText = `width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:${color};color:#fff;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;box-shadow:0 2px 6px rgba(0,0,0,0.45);`;
-      el.addEventListener('click', () => onSelectPlace(place.slug));
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onSelectPlace(place.slug);
+      });
+
       const wazeUrl = buildWazeUrl(place.coordinates.lat, place.coordinates.lng, {
         name: place.name,
         cityName: place.cityName,
@@ -95,9 +253,7 @@ export default function MapView({
         name: place.name,
         addressText: place.addressText,
         cityName: place.cityName,
-        origin: userLocation
-          ? `${userLocation.lat},${userLocation.lng}`
-          : 'Colonia Florencia Norte, Tegucigalpa, Honduras',
+        origin: userLocation ? `${userLocation.lat},${userLocation.lng}` : undefined,
       });
 
       const marker = new maplibregl.Marker({ element: el })
@@ -119,16 +275,7 @@ export default function MapView({
       bounds.extend([place.coordinates.lng, place.coordinates.lat]);
     }
 
-    if (userLocation) {
-      const me = new maplibregl.Marker({ color: '#10b981' })
-        .setLngLat([userLocation.lng, userLocation.lat])
-        .setPopup(new maplibregl.Popup({ offset: 14 }).setText('Tu ubicación'))
-        .addTo(map);
-      markersRef.current.push(me);
-      bounds.extend([userLocation.lng, userLocation.lat]);
-    }
-
-    // Dibujo de ruta activa si existe
+    // 4. RUTA ACTIVA SI EXISTE
     try {
       if (activeRoute?.geometryGeoJSON) {
         if (map.getSource('active-route-src')) {
@@ -168,25 +315,161 @@ export default function MapView({
         }
       }
     } catch {
-      // Ignora error puntual de capas en re-render
+      // Ignora error puntual de capas
     }
 
     if (!bounds.isEmpty()) {
       map.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 500 });
-    } else if (fallbackCenter) {
-      map.flyTo({ center: [fallbackCenter.lng, fallbackCenter.lat], zoom: 10 });
+    } else if (centerPoint) {
+      map.flyTo({ center: [centerPoint.lng, centerPoint.lat], zoom: 11 });
     }
-  }, [places, userLocation, fallbackCenter, activeRoute, ready, onSelectPlace]);
+  }, [
+    places,
+    userLocation,
+    fallbackCenter,
+    activeRoute,
+    radiusKm,
+    unbounded,
+    ready,
+    onSelectPlace,
+    onSelectCoordinates,
+  ]);
 
   if (error) {
     return <div role="alert" className="alert alert-warn">{error}</div>;
   }
 
   return (
-    <div
-      ref={container}
-      className="map-box"
-      aria-label="Mapa de lugares verificados"
-    />
+    <div style={{ display: 'grid', gap: '.45rem' }}>
+      {/* BARRA DE CONTROL DE RADIO ESTILO FACEBOOK MARKETPLACE */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '.45rem',
+          background: '#ffffff',
+          padding: '.55rem .75rem',
+          borderRadius: 14,
+          border: '1.5px solid #e2e8f0',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setIsPinMode((v) => !v)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '5px 12px',
+              borderRadius: 999,
+              fontSize: '.78rem',
+              fontWeight: 800,
+              background: isPinMode ? '#ecfdf5' : '#f8fafc',
+              color: isPinMode ? '#059669' : '#475569',
+              border: isPinMode ? '2px solid #10b981' : '1px solid #cbd5e1',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>📍</span>
+            <span>{isPinMode ? 'Marcar en mapa (Activo)' : 'Marcar en el mapa'}</span>
+          </button>
+
+          {onResetToGps && (
+            <button
+              type="button"
+              onClick={onResetToGps}
+              title="Volver a mi ubicación satelital"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '5px 11px',
+                borderRadius: 999,
+                fontSize: '.78rem',
+                fontWeight: 700,
+                background: '#ffffff',
+                color: '#0284c7',
+                border: '1px solid #bae6fd',
+                cursor: 'pointer',
+              }}
+            >
+              <span>🎯</span>
+              <span>Mi GPS</span>
+            </button>
+          )}
+        </div>
+
+        {/* SELECTOR DE RADIO EN KILÓMETROS ESTILO MARKETPLACE */}
+        {onRadiusChange && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '.74rem', color: '#64748b', fontWeight: 700 }}>
+              Radio:
+            </span>
+            {[2, 5, 10, 20, 50].map((km) => {
+              const active = !unbounded && radiusKm === km;
+              return (
+                <button
+                  key={km}
+                  type="button"
+                  onClick={() => onRadiusChange(km)}
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: 999,
+                    fontSize: '.74rem',
+                    fontWeight: 800,
+                    border: active ? '1.5px solid #10b981' : '1px solid #e2e8f0',
+                    background: active ? '#10b981' : '#f8fafc',
+                    color: active ? '#ffffff' : '#334155',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {km} km
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* CONTENEDOR DEL MAPA CON CHIP FLOTANTE DE AYUDA */}
+      <div style={{ position: 'relative' }}>
+        <div
+          ref={container}
+          className="map-box"
+          aria-label="Mapa interactivo con radio de búsqueda"
+        />
+
+        {/* Indicador flotante en el mapa */}
+        {isPinMode && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 12,
+              left: 12,
+              background: 'rgba(15, 23, 42, 0.85)',
+              color: '#ffffff',
+              padding: '4px 10px',
+              borderRadius: 8,
+              fontSize: '.74rem',
+              fontWeight: 600,
+              backdropFilter: 'blur(6px)',
+              pointerEvents: 'none',
+              zIndex: 5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <span>📍 Toca cualquier punto o arrastra el pin para mover el radio ({radiusKm} km)</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
