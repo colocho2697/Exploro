@@ -24,6 +24,7 @@ interface Props {
   onAddToCollection: (collectionId: string, place: PlaceCardDTO) => void;
   onRequireLogin: () => void;
   onCalculateRoute?: (coords: Coordinates, name: string) => void;
+  userOrigin?: string | null;
 }
 
 function formatPriceRange(place: PlaceCardDTO): string {
@@ -48,6 +49,7 @@ export function PlaceCard({
   onAddToCollection: _onAddToCollection,
   onRequireLogin,
   onCalculateRoute,
+  userOrigin,
 }: Props): React.JSX.Element {
   const [openDetail, setOpenDetail] = useState(false);
   const distanceLabel = formatDistanceKm(place.distanceMeters);
@@ -316,6 +318,7 @@ export function PlaceCard({
           onToggleFavorite={() => (isLoggedIn ? onToggleFavorite(place) : onRequireLogin())}
           onClose={() => setOpenDetail(false)}
           onCalculateRoute={onCalculateRoute}
+          userOrigin={userOrigin}
         />
       )}
     </>

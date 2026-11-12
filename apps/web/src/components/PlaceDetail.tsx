@@ -221,7 +221,7 @@ export function PlaceDetail({
       name: cleanTitle,
       addressText: activePlace.addressText,
       cityName: activePlace.cityName,
-      origin: userOrigin ?? 'Colonia Florencia Norte, Tegucigalpa, Honduras',
+      origin: userOrigin ?? undefined,
     }
   );
   const wazeUrl = buildWazeUrl(

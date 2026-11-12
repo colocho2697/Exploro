@@ -170,27 +170,27 @@ export default function ExploroHomePage(): React.JSX.Element {
     if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const isAccurate = pos.coords.accuracy <= 3000;
-          if (isAccurate) {
-            setFilterValues((prev) => ({
-              ...prev,
-              coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-              radiusKm: DEFAULT_RADIUS_KM,
-              unbounded: false,
-              sortBy: 'recommended',
-            }));
-            setGpsStatus(`GPS Activo (±${Math.round(pos.coords.accuracy)}m)`);
-          } else {
-            setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
-          }
+          setFilterValues((prev) => ({
+            ...prev,
+            coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+            citySlug: '',
+            radiusKm: DEFAULT_RADIUS_KM,
+            unbounded: false,
+            sortBy: 'recommended',
+          }));
+          setGpsStatus(
+            pos.coords.accuracy < 1500
+              ? `GPS Activo (±${Math.round(pos.coords.accuracy)}m)`
+              : 'Ubicación actual detectada'
+          );
         },
         () => {
-          setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
+          setGpsStatus('Tegucigalpa (5 km)');
         },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
       );
     } else {
-      setGpsStatus('Col. Florencia Norte, Tegucigalpa (5 km)');
+      setGpsStatus('Tegucigalpa (5 km)');
     }
 
   }, [session.client]);
@@ -1066,6 +1066,11 @@ export default function ExploroHomePage(): React.JSX.Element {
                           onAddToCollection={(cid, p) => void library.addToCollection(cid, p)}
                           onRequireLogin={() => setShowAuth(true)}
                           onCalculateRoute={handleCalculateRoute}
+                          userOrigin={
+                            filterValues.coords
+                              ? `${filterValues.coords.lat},${filterValues.coords.lng}`
+                              : null
+                          }
                         />
                       </div>
                     ))}
