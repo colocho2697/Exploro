@@ -84,7 +84,6 @@ export default function MapView({
   const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const [isPinMode, setIsPinMode] = useState(true);
   const [searchCityQuery, setSearchCityQuery] = useState('');
   const [searchingCity, setSearchingCity] = useState(false);
 
@@ -174,19 +173,15 @@ export default function MapView({
     };
   }, []);
 
-  // Manejador interactivo de clic en el mapa para mover el radio (estilo Marketplace)
+  // Manejador interactivo de clic en el mapa para mover el radio directamente
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
 
-    if (isPinMode) {
-      map.getCanvas().style.cursor = 'crosshair';
-    } else {
-      map.getCanvas().style.cursor = '';
-    }
+    map.getCanvas().style.cursor = 'pointer';
 
     const handleMapClick = (e: maplibregl.MapMouseEvent) => {
-      if (!isPinMode || !onSelectCoordinatesRef.current) return;
+      if (!onSelectCoordinatesRef.current) return;
       const target = e.originalEvent?.target as HTMLElement | null;
       if (target?.closest('.maplibregl-marker') || target?.closest('.maplibregl-popup')) {
         return;
@@ -198,7 +193,7 @@ export default function MapView({
     return () => {
       map.off('click', handleMapClick);
     };
-  }, [ready, isPinMode]);
+  }, [ready]);
 
   // Actualización de marcadores, centro y círculo de radio
   useEffect(() => {
@@ -408,8 +403,8 @@ export default function MapView({
   }
 
   return (
-    <div style={{ display: 'grid', gap: '.45rem' }}>
-      {/* BARRA DE CONTROL DE RADIO ESTILO FACEBOOK MARKETPLACE */}
+    <div style={{ display: 'grid', gap: '.5rem' }}>
+      {/* BARRA MINIMALISTA DE BÚSQUEDA Y RADIO */}
       <div
         style={{
           display: 'flex',
@@ -418,60 +413,12 @@ export default function MapView({
           justifyContent: 'space-between',
           gap: '.45rem',
           background: '#ffffff',
-          padding: '.55rem .75rem',
+          padding: '.5rem .65rem',
           borderRadius: 14,
-          border: '1.5px solid #e2e8f0',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setIsPinMode((v) => !v)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '5px 12px',
-              borderRadius: 999,
-              fontSize: '.78rem',
-              fontWeight: 800,
-              background: isPinMode ? '#ecfdf5' : '#f8fafc',
-              color: isPinMode ? '#059669' : '#475569',
-              border: isPinMode ? '2px solid #10b981' : '1px solid #cbd5e1',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>📍</span>
-            <span>{isPinMode ? 'Marcar en mapa (Activo)' : 'Marcar en el mapa'}</span>
-          </button>
-
-          {onResetToGps && (
-            <button
-              type="button"
-              onClick={onResetToGps}
-              title="Volver a mi ubicación satelital"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '5px 11px',
-                borderRadius: 999,
-                fontSize: '.78rem',
-                fontWeight: 700,
-                background: '#ffffff',
-                color: '#0284c7',
-                border: '1px solid #bae6fd',
-                cursor: 'pointer',
-              }}
-            >
-              <span>🎯</span>
-              <span>Mi GPS</span>
-            </button>
-          )}
-        </div>
-
         {/* BUSCADOR MUNDIAL DE CIUDADES O DESTINOS */}
         <form
           onSubmit={handleGlobalSearch}
@@ -479,8 +426,7 @@ export default function MapView({
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            flex: '1 1 230px',
-            maxWidth: 360,
+            flex: '1 1 200px',
           }}
         >
           <div style={{ position: 'relative', width: '100%' }}>
@@ -488,13 +434,13 @@ export default function MapView({
               type="text"
               value={searchCityQuery}
               onChange={(e) => setSearchCityQuery(e.target.value)}
-              placeholder="🌎 Ciudad mundial (ej. Dallas, Madrid, Tokio...)"
+              placeholder="Buscar ciudad o zona (ej. Dallas, Madrid...)"
               style={{
                 width: '100%',
-                padding: '5px 10px 5px 28px',
-                fontSize: '.76rem',
+                padding: '6px 12px 6px 30px',
+                fontSize: '.8rem',
                 borderRadius: 999,
-                border: '1.5px solid #cbd5e1',
+                border: '1px solid #e2e8f0',
                 outline: 'none',
                 background: '#f8fafc',
               }}
@@ -502,42 +448,41 @@ export default function MapView({
             <span
               style={{
                 position: 'absolute',
-                left: 8,
+                left: 10,
                 top: '50%',
                 transform: 'translateY(-50%)',
-                fontSize: '.74rem',
+                fontSize: '.78rem',
                 pointerEvents: 'none',
               }}
             >
               🔍
             </span>
           </div>
-          <button
-            type="submit"
-            disabled={searchingCity || !searchCityQuery.trim()}
-            style={{
-              padding: '5px 11px',
-              borderRadius: 999,
-              fontSize: '.76rem',
-              fontWeight: 800,
-              background: '#0f172a',
-              color: '#ffffff',
-              border: 'none',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {searchingCity ? 'Buscando…' : 'Ir'}
-          </button>
+          {searchCityQuery.trim().length > 0 && (
+            <button
+              type="submit"
+              disabled={searchingCity}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 999,
+                fontSize: '.76rem',
+                fontWeight: 800,
+                background: '#0f172a',
+                color: '#ffffff',
+                border: 'none',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {searchingCity ? '…' : 'Ir'}
+            </button>
+          )}
         </form>
 
-        {/* SELECTOR DE RADIO EN KILÓMETROS ESTILO MARKETPLACE */}
-        {onRadiusChange && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '.74rem', color: '#64748b', fontWeight: 700 }}>
-              Radio:
-            </span>
-            {[2, 5, 10, 20, 50].map((km) => {
+        {/* SELECTOR COMPACTO DE RADIO + GPS */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem', flexWrap: 'wrap' }}>
+          {onRadiusChange &&
+            [2, 5, 10, 20, 50].map((km) => {
               const active = !unbounded && radiusKm === km;
               return (
                 <button
@@ -545,13 +490,13 @@ export default function MapView({
                   type="button"
                   onClick={() => onRadiusChange(km)}
                   style={{
-                    padding: '3px 9px',
+                    padding: '4px 9px',
                     borderRadius: 999,
                     fontSize: '.74rem',
                     fontWeight: 800,
                     border: active ? '1.5px solid #10b981' : '1px solid #e2e8f0',
-                    background: active ? '#10b981' : '#f8fafc',
-                    color: active ? '#ffffff' : '#334155',
+                    background: active ? '#10b981' : '#ffffff',
+                    color: active ? '#ffffff' : '#475569',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
                   }}
@@ -560,43 +505,39 @@ export default function MapView({
                 </button>
               );
             })}
-          </div>
-        )}
+
+          {onResetToGps && (
+            <button
+              type="button"
+              onClick={onResetToGps}
+              title="Centrar en mi ubicación actual"
+              aria-label="Centrar en mi ubicación actual"
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '.82rem',
+                background: '#f8fafc',
+                color: '#0f172a',
+                border: '1px solid #e2e8f0',
+                cursor: 'pointer',
+              }}
+            >
+              🎯
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* CONTENEDOR DEL MAPA CON CHIP FLOTANTE DE AYUDA */}
-      <div style={{ position: 'relative' }}>
-        <div
-          ref={container}
-          className="map-box"
-          aria-label="Mapa interactivo con radio de búsqueda"
-        />
-
-        {/* Indicador flotante en el mapa */}
-        {isPinMode && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 12,
-              left: 12,
-              background: 'rgba(15, 23, 42, 0.85)',
-              color: '#ffffff',
-              padding: '4px 10px',
-              borderRadius: 8,
-              fontSize: '.74rem',
-              fontWeight: 600,
-              backdropFilter: 'blur(6px)',
-              pointerEvents: 'none',
-              zIndex: 5,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <span>📍 Toca cualquier punto o arrastra el pin para mover el radio ({radiusKm} km)</span>
-          </div>
-        )}
-      </div>
+      {/* CONTENEDOR LIMPIO DEL MAPA */}
+      <div
+        ref={container}
+        className="map-box"
+        aria-label="Mapa interactivo con radio de búsqueda"
+      />
     </div>
   );
 }

@@ -147,8 +147,8 @@ export class GooglePlacesLiveService {
     const cacheKey = `googleplaces:live:${latCell}:${lngCell}:${categorySlug}:${Math.round(radiusKm)}:${query.searchQuery ?? ''}`;
 
     const cachedCheck = await this.redis.getJson<boolean>(cacheKey);
-    if (cachedCheck) {
-      return 0; // Ya se indexó esta zona recientemente
+    if (cachedCheck && existingCount > 0) {
+      return 0; // Ya se indexó esta zona recientemente y cuenta con lugares
     }
 
     try {
