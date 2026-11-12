@@ -4,180 +4,288 @@ import React, { useEffect, useState } from 'react';
 import { ExploroApiClient } from '@exploro/api-client';
 import {
   ActivityLogDTO,
+  PlaceCardDTO,
   PlaceDetailDTO,
-  PlaceRecommendationSummary,
   UserReviewDTO,
 } from '@exploro/shared-types';
-import { buildGoogleMapsUrl, buildWazeUrl } from '../lib/format';
+import {
+  buildGoogleMapsUrl,
+  buildWazeUrl,
+  computeMultiSourceScore,
+  formatDistanceKm,
+  getPlacePhotoGallery,
+  parseRecommendationReason,
+} from '../lib/format';
 
 const TIME_OF_DAY: Record<string, string> = {
-  MORNING: 'mañana',
-  AFTERNOON: 'tarde',
-  NIGHT: 'noche',
-  ANY: 'cualquier hora',
+  MORNING: 'Mañana',
+  AFTERNOON: 'Tarde / Atardecer',
+  NIGHT: 'Noche',
+  ANY: 'Cualquier hora',
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-  EXTERNAL_COMMUNITY: 'Comunidad externa (Reddit)',
-  BLOG: 'Blog de viajes independiente',
-  NATIVE_EXPERIENCE: 'Experiencia nativa verificada',
-  CURATED: 'Curaduría editorial',
+  EXTERNAL_COMMUNITY: 'Reddit & Comunidad',
+  BLOG: 'Blog independiente',
+  NATIVE_EXPERIENCE: 'Visita verificada Exploro',
+  CURATED: 'Guía local & Redes',
 };
 
-/** Evidencias, actividades, cálculo de rutas, experiencias propias y verificación. */
+interface PlaceDetailProps {
+  client: ExploroApiClient;
+  slug: string;
+  initialCard?: PlaceCardDTO;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  onClose?: () => void;
+  onCalculateRoute?: (coords: { lat: number; lng: number }, name: string) => void;
+}
+
+function getCategorySubtitleLines(
+  place: Pick<
+    PlaceCardDTO,
+    'categorySlug' | 'categoryName' | 'subcategoryName' | 'cityName' | 'tags'
+  >,
+  detail: PlaceDetailDTO | null
+): { line1: string; line2: string; highlightIcon: string; highlightTitle: string } {
+  const cleanTags = place.tags
+    .filter((t) => !t.startsWith('★') && !t.startsWith('🏆'))
+    .slice(0, 3);
+
+  switch (place.categorySlug) {
+    case 'comida': {
+      const specs = detail?.establishment?.specialties?.slice(0, 3) ?? cleanTags;
+      return {
+        line1: `Restaurante recomendado en ${place.cityName}`,
+        line2:
+          specs.length > 0
+            ? specs.join(' · ')
+            : 'Sabor verificado · Buena relación calidad-precio · Menú local',
+        highlightIcon: '🍽️',
+        highlightTitle: 'Especialidades y propuesta gastronómica',
+      };
+    }
+    case 'turismo': {
+      const act = detail?.activities?.[0];
+      const duration = act?.estimatedDurationMins
+        ? `${act.estimatedDurationMins} min de recorrido`
+        : 'Recorrido panorámico';
+      const timeLabel = act?.bestTimeOfDay
+        ? `Ideal en: ${TIME_OF_DAY[act.bestTimeOfDay] ?? act.bestTimeOfDay}`
+        : 'Aire libre y fotografía';
+      return {
+        line1: `${place.subcategoryName ?? 'Destino turístico'} en ${place.cityName}`,
+        line2: `${duration} · ${timeLabel} · ${cleanTags[0] ?? 'Acceso verificado'}`,
+        highlightIcon: '🌄',
+        highlightTitle: 'Experiencia turística y recorrido sugerido',
+      };
+    }
+    case 'entretenimiento':
+      return {
+        line1: `Entretenimiento y vida cultural en ${place.cityName}`,
+        line2:
+          cleanTags.length > 0
+            ? cleanTags.join(' · ')
+            : 'Ambiente seguro · Ideal con amigos o pareja',
+        highlightIcon: '🎭',
+        highlightTitle: 'Ambiente, cartelera y experiencia nocturna',
+      };
+    case 'actividades': {
+      const act = detail?.activities?.[0];
+      const duration = act?.estimatedDurationMins
+        ? `Duración: ${act.estimatedDurationMins} min`
+        : 'Actividad al aire libre';
+      return {
+        line1: `Actividad recreativa y deportiva en ${place.cityName}`,
+        line2: `${duration} · Ruta segura · ${cleanTags.join(' · ') || 'Contacto con naturaleza'}`,
+        highlightIcon: '🛶',
+        highlightTitle: 'Detalles de la ruta, duración y nivel físico',
+      };
+    }
+    case 'eventos':
+      return {
+        line1: `Agenda cultural y evento en ${place.cityName}`,
+        line2:
+          cleanTags.length > 0
+            ? cleanTags.join(' · ')
+            : 'Música en vivo · Gastronomía · Diseño local',
+        highlightIcon: '🎪',
+        highlightTitle: 'Qué encontrarás en este evento',
+      };
+    case 'compras':
+    default:
+      return {
+        line1: `Compras, diseño y artesanías en ${place.cityName}`,
+        line2:
+          cleanTags.length > 0
+            ? cleanTags.join(' · ')
+            : 'Productos auténticos · Parqueo y zona segura',
+        highlightIcon: '🛍️',
+        highlightTitle: 'Productos destacados y experiencia de compra',
+      };
+  }
+}
+
+function formatCleanPrice(place: Pick<PlaceCardDTO, 'priceStatus' | 'priceTier' | 'avgPriceMin' | 'avgPriceMax' | 'currencyCode'>): string {
+  if (place.priceStatus !== 'CONFIRMED') return 'Consultar precio';
+  if (place.priceTier === 'FREE' || (place.avgPriceMin === 0 && place.avgPriceMax === 0)) {
+    return 'Gratis';
+  }
+  if (place.avgPriceMin !== null && place.avgPriceMax !== null) {
+    return `$${place.avgPriceMin}–$${place.avgPriceMax} ${place.currencyCode}`;
+  }
+  return place.priceTier;
+}
+
+/**
+ * Pantalla de Detalles Estilo Airbnb:
+ * - Galería de fotos en la parte superior con contador (1 / 4) y botones circulares flotantes (←, ⤴, ♡)
+ * - Hoja blanca redondeada abajo con detalles adaptados según la categoría del lugar
+ * - Desglose del Puntaje Multi-Fuente (Google Maps + Reddit + Redes Sociales)
+ * - Barra fija inferior con precio y un simple botón principal «Ir ahora»
+ */
 export function PlaceDetail({
   client,
   slug,
+  initialCard,
+  isFavorite = false,
+  onToggleFavorite,
+  onClose,
   onCalculateRoute: _onCalculateRoute,
-}: {
-  client: ExploroApiClient;
-  slug: string;
-  onCalculateRoute?: (coords: { lat: number; lng: number }, name: string) => void;
-}): React.JSX.Element {
+}: PlaceDetailProps): React.JSX.Element {
   const [detail, setDetail] = useState<PlaceDetailDTO | null>(null);
-  const [recSummary, setRecSummary] = useState<PlaceRecommendationSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  // Fase 5: Actividad y reseñas
   const [activeActivity, setActiveActivity] = useState<ActivityLogDTO | null>(null);
   const [placeReviews, setPlaceReviews] = useState<UserReviewDTO[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isVerifyingGps, setIsVerifyingGps] = useState(false);
-  const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
-
-  // Formulario de reseña corta adaptada (Fase 5)
-  const [tasteQuality, setTasteQuality] = useState(5);
-  const [serviceRating, setServiceRating] = useState(5);
-  const [valueForMoney, setValueForMoney] = useState<'EXCELLENT' | 'FAIR' | 'EXPENSIVE'>('EXCELLENT');
-  const [amountPaid, setAmountPaid] = useState<string>('15');
-  const [recommendedItem, setRecommendedItem] = useState('');
-  const [worthIt, setWorthIt] = useState(true);
-  const [durationSpent, setDurationSpent] = useState<'UNDER_1_HOUR' | '1_TO_2_HOURS' | '2_TO_4_HOURS'>('1_TO_2_HOURS');
-  const [accessibility, setAccessibility] = useState<'EASY' | 'MODERATE' | 'WHEELCHAIR_ACCESSIBLE'>('EASY');
-  const [caveatOrTip, setCaveatOrTip] = useState('');
-  const [comment, setComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [recommendedItem, setRecommendedItem] = useState('');
+  const [comment, setComment] = useState('');
 
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
+    setDetail(null);
+    setError(null);
+    setPhotoIndex(0);
+
     client
       .getPlaceBySlug(slug)
       .then(async (d) => {
-        if (!active) return;
+        if (cancelled) return;
         setDetail(d);
-
-        // Cargar recomendaciones y opiniones de la comunidad
-        const [rec, reviews, currAct] = await Promise.all([
-          client.getPlaceRecommendationSummary(d.id).catch(() => null),
-          client.getPlaceReviews(d.id).catch(() => []),
-          client.getActiveActivity().catch(() => null),
-        ]);
-
-        if (active) {
-          if (rec) setRecSummary(rec);
-          if (reviews) setPlaceReviews(reviews);
-          if (currAct && currAct.placeId === d.id) setActiveActivity(currAct);
+        try {
+          const revs = await client.getPlaceReviews(d.id).catch(() => []);
+          if (!cancelled) {
+            setPlaceReviews(revs);
+          }
+        } catch {
+          // Respaldo silencioso
         }
       })
       .catch((e: unknown) => {
-        if (active) setError(e instanceof Error ? e.message : 'No se pudo cargar el detalle.');
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'No se pudo cargar la ficha.');
+        }
       });
 
     return () => {
-      active = false;
+      cancelled = true;
     };
   }, [client, slug]);
 
-  const handleStartActivity = async () => {
-    if (!detail) return;
-    try {
-      setError(null);
-      const act = await client.startActivity({
-        placeId: detail.id,
-        activityTitle: detail.activities[0]?.title ?? `Visita a ${detail.name}`,
-      });
-      setActiveActivity(act);
-      setVerifyMsg('¡Actividad iniciada! Disfruta tu visita.');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error al iniciar actividad (¿iniciaste sesión?)');
-    }
-  };
-
-  const handleVerifyGps = () => {
-    if (!activeActivity || !navigator.geolocation) {
-      setVerifyMsg('Geolocalización no disponible en este dispositivo.');
-      return;
-    }
-    setIsVerifyingGps(true);
-    setVerifyMsg('Obteniendo coordenadas GPS para verificar visita...');
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const res = await client.verifyActivityVisit(activeActivity.id, {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          });
-          setIsVerifyingGps(false);
-          setVerifyMsg(res.message);
-          if (res.isVerified) {
-            setActiveActivity((prev) =>
-              prev ? { ...prev, isVerifiedVisit: true, verificationMethod: 'GPS_PROXIMITY' } : null
-            );
-          }
-        } catch (e: unknown) {
-          setIsVerifyingGps(false);
-          setVerifyMsg(e instanceof Error ? e.message : 'Error al verificar proximidad.');
-        }
-      },
-      (err) => {
-        setIsVerifyingGps(false);
-        setVerifyMsg(`No se pudo acceder al GPS: ${err.message}`);
-      },
-      { timeout: 10000, enableHighAccuracy: true }
+  const activePlace: PlaceCardDTO | null = detail ?? initialCard ?? null;
+  if (!activePlace && error) {
+    return <div role="alert" className="alert alert-error">{error}</div>;
+  }
+  if (!activePlace) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center', color: '#717171' }}>
+        Cargando detalles del lugar…
+      </div>
     );
+  }
+
+  const photos = getPlacePhotoGallery(activePlace);
+  const currentPhoto = photos[photoIndex] ?? photos[0]!;
+  const score = computeMultiSourceScore(activePlace);
+  const parsedReason = parseRecommendationReason(activePlace.recommendationReason);
+  const distanceLabel = formatDistanceKm(activePlace.distanceMeters);
+  const catInfo = getCategorySubtitleLines(activePlace, detail);
+  const cleanTitle = activePlace.name.replace(/^\d+\.\s*/, '');
+
+  // URL de navegación directa para el botón simple «Ir ahora»
+  const googleMapsUrl = buildGoogleMapsUrl(
+    activePlace.coordinates.lat,
+    activePlace.coordinates.lng
+  );
+  const wazeUrl = buildWazeUrl(
+    activePlace.coordinates.lat,
+    activePlace.coordinates.lng
+  );
+
+  const handleShare = (): void => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(window.location.href);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }
   };
 
-  const handleCompleteReview = async (e: React.FormEvent) => {
+  const handleStartActivity = async (): Promise<void> => {
+    try {
+      const started = await client.startActivity({
+        placeId: activePlace.id,
+        activityTitle: `Visita a ${cleanTitle}`,
+      });
+      setActiveActivity(started);
+      setShowReviewModal(true);
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Inicia sesión para registrar tu opinión.'
+      );
+    }
+  };
+
+  const handleCompleteReview = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    if (!activeActivity || !detail) return;
+    if (!activeActivity) return;
     setSubmittingReview(true);
     try {
-      const isRestaurant = detail.categorySlug === 'comida';
+      const isRestaurant = activePlace.categorySlug === 'comida';
       const createdReview = await client.completeActivityWithReview(activeActivity.id, {
         reviewType: isRestaurant ? 'RESTAURANT' : 'TOURISM',
         restaurantReview: isRestaurant
           ? {
-              tasteQuality,
-              serviceRating,
-              valueForMoney,
-              amountPaid: amountPaid ? Number(amountPaid) : undefined,
+              tasteQuality: 5,
+              serviceRating: 5,
+              valueForMoney: 'EXCELLENT',
               recommendedDish: recommendedItem,
-              wouldReturn: worthIt,
+              wouldReturn: true,
               comment,
             }
           : undefined,
         tourismReview: !isRestaurant
           ? {
-              worthIt,
-              durationSpent,
-              amountPaid: amountPaid ? Number(amountPaid) : undefined,
-              accessibility,
+              worthIt: true,
+              durationSpent: '1_TO_2_HOURS',
+              accessibility: 'EASY',
               recommendedItem,
-              caveatOrTip,
               comment,
             }
           : undefined,
-        wouldReturnOrRecommend: worthIt,
+        wouldReturnOrRecommend: true,
         generalComment: comment,
       });
 
       setActiveActivity(null);
       setShowReviewModal(false);
-      setVerifyMsg('¡Gracias por compartir tu experiencia! Tu opinión ya fortalece el ranking.');
       setPlaceReviews((prev) => [createdReview, ...prev]);
-
-      // Refrescar resumen de recomendaciones
-      const updatedRec = await client.getPlaceRecommendationSummary(detail.id).catch(() => null);
-      if (updatedRec) setRecSummary(updatedRec);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al enviar opinión.');
     } finally {
@@ -185,574 +293,756 @@ export function PlaceDetail({
     }
   };
 
-  if (error) return <div role="alert" className="alert alert-error">{error}</div>;
-  if (!detail) return <p style={{ color: 'var(--text-secondary)', fontSize: '.85rem' }}>Cargando evidencias…</p>;
-
-  const isFoodCategory = detail.categorySlug === 'comida';
-
-  return (
-    <div style={{ display: 'grid', gap: '.8rem', fontSize: '.85rem' }}>
-      {/* Botones principales de navegación directa (Waze / Google Maps) y actividad */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: '.5rem',
-        }}
-      >
-        <a
-          href={buildWazeUrl(detail.coordinates.lat, detail.coordinates.lng)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn"
-          style={{
-            width: '100%',
-            justifyContent: 'center',
-            fontSize: '.8rem',
-            fontWeight: 700,
-            background: 'rgba(56, 189, 248, 0.16)',
-            borderColor: 'rgba(56, 189, 248, 0.45)',
-            color: '#38bdf8',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '.35rem',
-          }}
-        >
-          🚗 Abrir en Waze
-        </a>
-
-        <a
-          href={buildGoogleMapsUrl(detail.coordinates.lat, detail.coordinates.lng)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn"
-          style={{
-            width: '100%',
-            justifyContent: 'center',
-            fontSize: '.8rem',
-            fontWeight: 700,
-            background: 'rgba(16, 185, 129, 0.15)',
-            borderColor: 'rgba(16, 185, 129, 0.45)',
-            color: '#34d399',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '.35rem',
-          }}
-        >
-          🗺️ Abrir en Google Maps
-        </a>
-
-        {!activeActivity ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleStartActivity}
-            style={{ width: '100%', justifyContent: 'center', fontSize: '.8rem' }}
-          >
-            🚀 Registrar visita
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setShowReviewModal(true)}
-            style={{ width: '100%', justifyContent: 'center', fontSize: '.8rem', background: '#10b981' }}
-          >
-            ✅ Finalizar experiencia
-          </button>
-        )}
-      </div>
-
-      {/* Banner de actividad en curso (Fase 5) */}
-      {activeActivity && (
+  const content = (
+    <div className="airbnb-detail-modal" onClick={(e) => e.stopPropagation()}>
+      {/* Área desplazable: Carrusel de Fotos arriba + Hoja Redondeada abajo */}
+      <div style={{ flex: 1, overflowY: 'auto', background: '#ffffff' }}>
+        {/* 1. CARRUSEL SUPERIOR DE FOTOS ESTILO AIRBNB */}
         <div
           style={{
-            background: 'rgba(16, 185, 129, 0.15)',
-            border: '1px solid #10b981',
-            borderRadius: '6px',
-            padding: '.6rem .8rem',
-            display: 'grid',
-            gap: '.4rem',
+            position: 'relative',
+            width: '100%',
+            height: 330,
+            background: '#f4f4f5',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong style={{ color: '#6ee7b7' }}>
-              📍 Actividad en curso: {activeActivity.activityTitle}
-            </strong>
-            <span
-              style={{
-                fontSize: '.72rem',
-                padding: '.1rem .4rem',
-                borderRadius: '4px',
-                fontWeight: 700,
-                background: activeActivity.isVerifiedVisit ? '#10b981' : '#f59e0b',
-                color: '#0f172a',
-              }}
-            >
-              {activeActivity.isVerifiedVisit ? '✓ Visita Verificada' : 'Visita sin verificar'}
-            </span>
-          </div>
-
-          {!activeActivity.isVerifiedVisit && (
-            <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', marginTop: '.2rem' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={isVerifyingGps}
-                onClick={handleVerifyGps}
-                style={{ fontSize: '.75rem', padding: '.25rem .5rem' }}
-              >
-                {isVerifyingGps ? '⏳ Verificando…' : '📍 Verificar presencia (GPS)'}
-              </button>
-              <span style={{ fontSize: '.72rem', color: '#94a3b8' }}>
-                Regla: el inicio no prueba la visita.
-              </span>
-            </div>
-          )}
-
-          {verifyMsg && (
-            <p style={{ margin: 0, fontSize: '.75rem', color: '#38bdf8' }}>{verifyMsg}</p>
-          )}
-        </div>
-      )}
-
-      {/* Modal/Formulario de Cuestionario Corto Adaptado (Fase 5) */}
-      {showReviewModal && (
-        <form
-          onSubmit={handleCompleteReview}
-          style={{
-            background: '#0f172a',
-            border: '2px solid #38bdf8',
-            borderRadius: '8px',
-            padding: '.8rem',
-            display: 'grid',
-            gap: '.6rem',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong style={{ color: '#f8fafc', fontSize: '.9rem' }}>
-              {isFoodCategory ? '🍽️ Tu experiencia en este restaurante' : '🌄 Tu experiencia turística'}
-            </strong>
-            <button
-              type="button"
-              onClick={() => setShowReviewModal(false)}
-              style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
-            >
-              ✕
-            </button>
-          </div>
-
-          <p style={{ margin: 0, color: '#94a3b8', fontSize: '.75rem' }}>
-            Cuestionario breve y conciso (sin formularios largos ni aburridos).
-          </p>
-
-          {isFoodCategory ? (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.4rem' }}>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  Calidad y Sabor:
-                  <select
-                    value={tasteQuality}
-                    onChange={(e) => setTasteQuality(Number(e.target.value))}
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  >
-                    <option value={5}>5 - Increíble</option>
-                    <option value={4}>4 - Muy bueno</option>
-                    <option value={3}>3 - Aceptable</option>
-                    <option value={2}>2 - Mejorable</option>
-                    <option value={1}>1 - Decepcionante</option>
-                  </select>
-                </label>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  Atención y Servicio:
-                  <select
-                    value={serviceRating}
-                    onChange={(e) => setServiceRating(Number(e.target.value))}
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  >
-                    <option value={5}>5 - Excelente</option>
-                    <option value={4}>4 - Rápida y atenta</option>
-                    <option value={3}>3 - Normal</option>
-                    <option value={2}>2 - Lenta</option>
-                    <option value={1}>1 - Mala atención</option>
-                  </select>
-                </label>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.4rem' }}>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  Relación Calidad-Precio:
-                  <select
-                    value={valueForMoney}
-                    onChange={(e) => setValueForMoney(e.target.value as any)}
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  >
-                    <option value="EXCELLENT">Excelente ($$ justo)</option>
-                    <option value="FAIR">Precio estándar</option>
-                    <option value="EXPENSIVE">Costoso para lo que ofrece</option>
-                  </select>
-                </label>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  Gasto promedio (USD):
-                  <input
-                    type="number"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    placeholder="Ej. 18"
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  />
-                </label>
-              </div>
-
-              <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                Plato recomendado:
-                <input
-                  type="text"
-                  value={recommendedItem}
-                  onChange={(e) => setRecommendedItem(e.target.value)}
-                  placeholder="Ej. Burrata Pizza Slice"
-                  style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                />
-              </label>
-            </>
-          ) : (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.4rem' }}>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  ¿Valió la pena?:
-                  <select
-                    value={worthIt ? 'yes' : 'no'}
-                    onChange={(e) => setWorthIt(e.target.value === 'yes')}
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  >
-                    <option value="yes">Totalmente sí</option>
-                    <option value="no">No lo recomendaría</option>
-                  </select>
-                </label>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  Tiempo invertido:
-                  <select
-                    value={durationSpent}
-                    onChange={(e) => setDurationSpent(e.target.value as any)}
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  >
-                    <option value="UNDER_1_HOUR">Menos de 1 hora</option>
-                    <option value="1_TO_2_HOURS">1 a 2 horas</option>
-                    <option value="2_TO_4_HOURS">2 a 4 horas</option>
-                  </select>
-                </label>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.4rem' }}>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  Accesibilidad:
-                  <select
-                    value={accessibility}
-                    onChange={(e) => setAccessibility(e.target.value as any)}
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  >
-                    <option value="EASY">Fácil acceso a pie</option>
-                    <option value="WHEELCHAIR_ACCESSIBLE">Apto silla de ruedas</option>
-                    <option value="MODERATE">Moderado / Escaleras</option>
-                  </select>
-                </label>
-                <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                  Gasto aproximado ($):
-                  <input
-                    type="number"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    placeholder="0 si fue gratis"
-                    style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                  />
-                </label>
-              </div>
-
-              <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-                ¿Qué debería saber otro visitante?:
-                <input
-                  type="text"
-                  value={caveatOrTip}
-                  onChange={(e) => setCaveatOrTip(e.target.value)}
-                  placeholder="Ej. Llevar abrigo porque suele haber viento"
-                  style={{ width: '100%', padding: '.2rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-                />
-              </label>
-            </>
-          )}
-
-          <label style={{ color: '#cbd5e1', fontSize: '.75rem' }}>
-            Comentario libre:
-            <textarea
-              rows={2}
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Consejo para otros viajeros..."
-              style={{ width: '100%', padding: '.3rem', background: '#1e293b', color: '#f8fafc', borderRadius: '4px' }}
-            />
-          </label>
-
-          <button
-            type="submit"
-            disabled={submittingReview}
-            className="btn btn-primary"
-            style={{ width: '100%', justifyContent: 'center' }}
-          >
-            {submittingReview ? 'Enviando opinión…' : 'Publicar experiencia'}
-          </button>
-        </form>
-      )}
-
-      {/* Panel de Inteligencia y Recomendación Explicable (Fase 4) */}
-      <section
-        style={{
-          background: 'rgba(30, 41, 59, 0.7)',
-          border: '1px solid #334155',
-          borderRadius: '8px',
-          padding: '.8rem',
-          display: 'grid',
-          gap: '.5rem',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong style={{ display: 'flex', alignItems: 'center', gap: '.4rem', color: '#f8fafc' }}>
-            <span>🧠</span> Recomendación Explicable
-          </strong>
-          <span
+          <img
+            src={currentPhoto}
+            alt={cleanTitle}
             style={{
-              fontSize: '.75rem',
-              padding: '.15rem .45rem',
-              borderRadius: '999px',
-              fontWeight: 700,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+
+          {/* Sombra superior suave para contraste de botones circulares */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
               background:
-                recSummary?.confidenceLevel === 'HIGH'
-                  ? 'rgba(16, 185, 129, 0.2)'
-                  : recSummary?.confidenceLevel === 'MEDIUM'
-                  ? 'rgba(56, 189, 248, 0.2)'
-                  : 'rgba(245, 158, 11, 0.2)',
-              color:
-                recSummary?.confidenceLevel === 'HIGH'
-                  ? '#34d399'
-                  : recSummary?.confidenceLevel === 'MEDIUM'
-                  ? '#38bdf8'
-                  : '#fbbf24',
-              border: '1px solid currentColor',
+                'linear-gradient(180deg, rgba(0,0,0,0.28) 0%, transparent 32%, transparent 72%, rgba(0,0,0,0.35) 100%)',
+              pointerEvents: 'none',
+            }}
+          />
+
+          {/* Barra flotante superior: ← Volver a la izquierda | ⤴ Compartir y ♡ Favorito a la derecha */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+              right: 16,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              zIndex: 10,
             }}
           >
-            Puntuación: {recSummary ? Math.round(recSummary.overallScore) : Math.round(detail.scoreSummary.overallScore)}/100
-          </span>
+            {onClose ? (
+              <button
+                type="button"
+                className="airbnb-circle-icon-btn"
+                onClick={onClose}
+                aria-label="Volver a recomendaciones"
+              >
+                ←
+              </button>
+            ) : (
+              <span />
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                className="airbnb-circle-icon-btn"
+                onClick={handleShare}
+                aria-label="Compartir lugar"
+                title="Compartir"
+              >
+                {shareCopied ? '✓' : '⤴'}
+              </button>
+              {onToggleFavorite && (
+                <button
+                  type="button"
+                  className="airbnb-circle-icon-btn"
+                  onClick={onToggleFavorite}
+                  aria-label="Guardar en favoritos"
+                  style={{ color: isFavorite ? '#FF385C' : '#222222' }}
+                >
+                  {isFavorite ? '♥' : '♡'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Controles laterales de galería */}
+          {photos.length > 1 && (
+            <>
+              <button
+                type="button"
+                aria-label="Foto anterior"
+                onClick={() =>
+                  setPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length)
+                }
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.88)',
+                  border: 'none',
+                  fontWeight: 800,
+                  color: '#222222',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="Foto siguiente"
+                onClick={() => setPhotoIndex((prev) => (prev + 1) % photos.length)}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.88)',
+                  border: 'none',
+                  fontWeight: 800,
+                  color: '#222222',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                }}
+              >
+                ›
+              </button>
+            </>
+          )}
+
+          {/* Contador de fotos esquina inferior derecha (idéntico al "4 / 25" de Airbnb) */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 38,
+              right: 16,
+              background: 'rgba(34, 34, 34, 0.78)',
+              color: '#ffffff',
+              padding: '4px 11px',
+              borderRadius: 8,
+              fontSize: '.78rem',
+              fontWeight: 700,
+              letterSpacing: '0.02em',
+            }}
+          >
+            {photoIndex + 1} / {photos.length}
+          </div>
         </div>
 
-        <p style={{ margin: 0, color: '#e2e8f0', lineHeight: 1.4 }}>
-          {recSummary?.explanation ?? detail.recommendationReason}
-        </p>
-
-        {/* Aspectos positivos respaldados */}
-        {recSummary && recSummary.topPositiveAspects.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem', marginTop: '.3rem' }}>
-            {recSummary.topPositiveAspects.map((asp) => (
-              <span
-                key={asp.aspect}
-                style={{
-                  fontSize: '.72rem',
-                  padding: '.15rem .4rem',
-                  borderRadius: '4px',
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  color: '#6ee7b7',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                }}
-              >
-                ✨ {asp.aspect} {asp.mentionsCount > 1 ? `(${asp.mentionsCount})` : ''}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Advertencias / Aspectos a tener en cuenta */}
-        {recSummary && recSummary.topNegativeAspects.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem', marginTop: '.2rem' }}>
-            {recSummary.topNegativeAspects.map((asp) => (
-              <span
-                key={asp.aspect}
-                style={{
-                  fontSize: '.72rem',
-                  padding: '.15rem .4rem',
-                  borderRadius: '4px',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  color: '#fca5a5',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                }}
-              >
-                ⚠️ {asp.aspect}
-              </span>
-            ))}
-          </div>
-        )}
-
+        {/* 2. HOJA BLANCA REDONDEADA SUPERPUESTA CON DETALLES ADAPTADOS POR CATEGORÍA */}
         <div
           style={{
-            fontSize: '.72rem',
-            color: 'var(--text-secondary)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            borderTop: '1px solid rgba(51, 65, 85, 0.5)',
-            paddingTop: '.4rem',
-            marginTop: '.2rem',
+            position: 'relative',
+            marginTop: -26,
+            borderRadius: '28px 28px 0 0',
+            background: '#ffffff',
+            padding: '1.6rem 1.45rem 2rem',
+            display: 'grid',
+            gap: '1.25rem',
           }}
         >
-          <span>
-            {recSummary?.factCheckPassed
-              ? '✅ Respaldado por evidencias'
-              : '⚠️ Información en revisión'}
-          </span>
-          <span style={{ color: '#94a3b8' }}>Gobernanza IA: Costo $0.00</span>
-        </div>
-      </section>
-
-      {/* Experiencias de la Comunidad Exploro (Fase 5) */}
-      <section>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong>Opiniones de la Comunidad ({placeReviews.length})</strong>
-          <span style={{ fontSize: '.72rem', color: '#10b981' }}>Comunidad Exploro</span>
-        </div>
-
-        {placeReviews.length === 0 ? (
-          <p style={{ color: 'var(--text-secondary)', marginTop: '.3rem' }}>
-            Aún no hay opiniones de la comunidad. ¡Sé el primero en iniciar una actividad y compartir tu experiencia!
-          </p>
-        ) : (
-          <ul style={{ paddingLeft: '0', display: 'grid', gap: '.5rem', marginTop: '.4rem', listStyle: 'none' }}>
-            {placeReviews.map((rev) => (
-              <li
-                key={rev.id}
+          {/* Miniaturas rápidas de fotos */}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+            {photos.map((url, idx) => (
+              <button
+                key={url}
+                type="button"
+                onClick={() => setPhotoIndex(idx)}
                 style={{
-                  background: 'rgba(15, 23, 42, 0.5)',
-                  border: '1px solid #334155',
-                  borderRadius: '6px',
-                  padding: '.6rem',
-                  display: 'grid',
-                  gap: '.3rem',
+                  width: 48,
+                  height: 34,
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                  border:
+                    idx === photoIndex
+                      ? '2.5px solid #FF385C'
+                      : '1px solid #e5e5e5',
+                  padding: 0,
+                  opacity: idx === photoIndex ? 1 : 0.65,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 600, color: '#f8fafc' }}>
-                    {rev.userName ?? 'Viajero anónimo'}
-                  </span>
-                  <span
+                <img
+                  src={url}
+                  alt=""
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </button>
+            ))}
+          </div>
+
+          {/* Título centrado + Subtítulo adaptado a la categoría + Línea ★ y reseñas */}
+          <div style={{ textAlign: 'center', display: 'grid', gap: '.4rem' }}>
+            <h2
+              style={{
+                fontSize: '1.55rem',
+                fontWeight: 800,
+                color: '#222222',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.2,
+              }}
+            >
+              {cleanTitle}
+            </h2>
+
+            <div style={{ color: '#717171', fontSize: '.92rem', lineHeight: 1.4 }}>
+              <div>{catInfo.line1}</div>
+              <div style={{ marginTop: 2 }}>{catInfo.line2}</div>
+            </div>
+
+            <div
+              style={{
+                marginTop: '.25rem',
+                display: 'inline-flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '.45rem',
+                flexWrap: 'wrap',
+                fontSize: '.88rem',
+                fontWeight: 700,
+                color: '#222222',
+              }}
+            >
+              <span>★ {score.mapsStars}</span>
+              <span>·</span>
+              <span style={{ textDecoration: 'underline' }}>
+                {score.mapsReviewsLabel}
+              </span>
+              <span>·</span>
+              <span
+                style={{
+                  background: '#ecfdf5',
+                  color: '#15803d',
+                  padding: '2px 9px',
+                  borderRadius: 999,
+                  fontSize: '.78rem',
+                  fontWeight: 800,
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                Puntaje {score.totalScore}/100
+              </span>
+            </div>
+          </div>
+
+          <hr style={{ border: 'none', borderTop: '1px solid #ebebeb' }} />
+
+          {/* Bloque de Curaduría / Respaldo (equivalente al bloque de Anfitrión en Airbnb) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.95rem' }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #FF385C 0%, #FF9600 100%)',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.35rem',
+                fontWeight: 800,
+                flexShrink: 0,
+                position: 'relative',
+                boxShadow: '0 4px 12px rgba(255, 56, 92, 0.25)',
+              }}
+            >
+              🏆
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: -2,
+                  right: -2,
+                  background: '#58CC02',
+                  color: '#fff',
+                  borderRadius: '50%',
+                  width: 18,
+                  height: 18,
+                  fontSize: '11px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid #fff',
+                }}
+              >
+                ✓
+              </span>
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '.96rem', color: '#222222' }}>
+                Selección Destacada · {activePlace.categoryName}
+              </div>
+              <div style={{ color: '#717171', fontSize: '.84rem' }}>
+                Respaldado en {score.sourcesSummary}
+              </div>
+            </div>
+          </div>
+
+          <hr style={{ border: 'none', borderTop: '1px solid #ebebeb' }} />
+
+          {/* 3 FILAS DE DETALLES CON ÍCONO (Igual que en la captura de Airbnb, adaptadas por categoría) */}
+          <div style={{ display: 'grid', gap: '1.15rem' }}>
+            {/* Fila 1: Ubicación y cercanía real */}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+              <span
+                style={{
+                  fontSize: '1.35rem',
+                  width: 32,
+                  textAlign: 'center',
+                  flexShrink: 0,
+                  marginTop: 2,
+                }}
+              >
+                📍
+              </span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
+                  {activePlace.addressText ?? activePlace.cityName}
+                  {distanceLabel ? ` · A ${distanceLabel} de ti` : ''}
+                </div>
+                <div style={{ color: '#717171', fontSize: '.86rem', marginTop: 2 }}>
+                  Dentro de tu radio de 5 km a la redonda. Toca «Ir ahora» abajo para abrir la ruta directa.
+                </div>
+              </div>
+            </div>
+
+            {/* Fila 2: Lo elegiría para + Detalles específicos de la categoría */}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+              <span
+                style={{
+                  fontSize: '1.35rem',
+                  width: 32,
+                  textAlign: 'center',
+                  flexShrink: 0,
+                  marginTop: 2,
+                }}
+              >
+                {catInfo.highlightIcon}
+              </span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
+                  {parsedReason.choiceReason}
+                </div>
+                <div style={{ color: '#717171', fontSize: '.86rem', marginTop: 3 }}>
+                  {activePlace.description}
+                </div>
+                {detail?.establishment && detail.establishment.specialties.length > 0 && (
+                  <div
                     style={{
-                      fontSize: '.7rem',
-                      padding: '.1rem .35rem',
-                      borderRadius: '4px',
-                      background: rev.isVerifiedVisit
-                        ? 'rgba(16, 185, 129, 0.2)'
-                        : 'rgba(56, 189, 248, 0.15)',
-                      color: rev.isVerifiedVisit ? '#34d399' : '#38bdf8',
-                      fontWeight: 600,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '.35rem',
+                      marginTop: '.5rem',
                     }}
                   >
-                    {rev.isVerifiedVisit ? '✓ Visita Verificada' : 'Opinión Nativa'}
-                  </span>
-                </div>
-
-                {rev.recommendedItem && (
-                  <div style={{ fontSize: '.78rem', color: '#38bdf8' }}>
-                    ✨ Recomendado: <strong>{rev.recommendedItem}</strong>
-                  </div>
-                )}
-
-                {rev.caveatOrTip && (
-                  <div style={{ fontSize: '.78rem', color: '#fbbf24' }}>
-                    💡 Tip: {rev.caveatOrTip}
-                  </div>
-                )}
-
-                {rev.comment && (
-                  <p style={{ margin: 0, color: '#cbd5e1', fontSize: '.8rem', fontStyle: 'italic' }}>
-                    "{rev.comment}"
-                  </p>
-                )}
-
-                <div style={{ fontSize: '.7rem', color: '#64748b' }}>
-                  {new Date(rev.createdAt).toLocaleDateString('es-US')}
-                  {rev.amountPaid ? ` • Gasto: $${rev.amountPaid}` : ''}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Evidencias externas auditables */}
-      <section>
-        <strong>Otras Evidencias Auditables ({detail.evidences.length})</strong>
-        {detail.evidences.length === 0 ? (
-          <p style={{ color: '#fbbf24' }}>Sin evidencias registradas todavía.</p>
-        ) : (
-          <ul style={{ paddingLeft: '1.1rem', display: 'grid', gap: '.6rem', marginTop: '.3rem' }}>
-            {detail.evidences.map((ev) => (
-              <li key={ev.id} style={{ borderLeft: '3px solid #10b981', paddingLeft: '.6rem' }}>
-                <div>"{ev.extractedSnippet}"</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '.78rem', marginTop: '.2rem' }}>
-                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>
-                    {SOURCE_LABELS[ev.sourceType] ?? ev.sourceName}
-                  </span>
-                  {' • '}
-                  <span>Confianza: {Math.round(ev.confidenceScore * 100)}%</span>
-                  {ev.publishedAt ? ` • ${new Date(ev.publishedAt).toLocaleDateString('es-US')}` : ''}
-                  {ev.externalUrl ? (
-                    <span>
-                      {' • '}
-                      <a
-                        href={ev.externalUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: '#93c5fd', textDecoration: 'underline' }}
+                    {detail.establishment.specialties.map((spec) => (
+                      <span
+                        key={spec}
+                        style={{
+                          fontSize: '.76rem',
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: 999,
+                          background: '#f4f4f5',
+                          color: '#222222',
+                        }}
                       >
-                        Enlace original
-                      </a>
-                    </span>
+                        🍴 {spec}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {detail?.activities && detail.activities.length > 0 && (
+                  <div style={{ marginTop: '.45rem', display: 'grid', gap: '.25rem' }}>
+                    {detail.activities.map((act) => (
+                      <div
+                        key={act.id}
+                        style={{
+                          fontSize: '.8rem',
+                          color: '#3f3f46',
+                          fontWeight: 600,
+                        }}
+                      >
+                        ✓ {act.title}
+                        {act.estimatedDurationMins ? ` (${act.estimatedDurationMins} min)` : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Fila 3: Desglose de Puntaje Multi-Fuente (Google Maps + Reddit + Redes Sociales) */}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+              <span
+                style={{
+                  fontSize: '1.35rem',
+                  width: 32,
+                  textAlign: 'center',
+                  flexShrink: 0,
+                  marginTop: 2,
+                }}
+              >
+                📊
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
+                  Puntaje Compuesto Exploro: {score.totalScore} / 100 pts
+                </div>
+                <div style={{ color: '#717171', fontSize: '.84rem', marginTop: 2 }}>
+                  Combinamos valoraciones y volumen de Google Maps con conversaciones en Reddit y presencia en redes sociales:
+                </div>
+
+                <div
+                  style={{
+                    marginTop: '.65rem',
+                    display: 'grid',
+                    gap: '.5rem',
+                    background: '#f8fafc',
+                    padding: '.8rem .9rem',
+                    borderRadius: 14,
+                    border: '1px solid #e5e5e5',
+                  }}
+                >
+                  {/* Barra Google Maps */}
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '.78rem',
+                        fontWeight: 700,
+                        color: '#222222',
+                        marginBottom: 3,
+                      }}
+                    >
+                      <span>📍 Valoraciones Google Maps ({score.mapsStars} ★ · {score.mapsReviewsLabel})</span>
+                      <span style={{ color: '#0284c7' }}>{score.mapsPoints} / 45 pts</span>
+                    </div>
+                    <div
+                      style={{
+                        height: 7,
+                        borderRadius: 999,
+                        background: '#e5e7eb',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${Math.round((score.mapsPoints / 45) * 100)}%`,
+                          height: '100%',
+                          background: '#1CB0F6',
+                          borderRadius: 999,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Barra Reddit */}
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '.78rem',
+                        fontWeight: 700,
+                        color: '#222222',
+                        marginBottom: 3,
+                      }}
+                    >
+                      <span>💬 Comunidad en Reddit (r/Honduras & viajeros)</span>
+                      <span style={{ color: '#ea580c' }}>{score.redditPoints} / 30 pts</span>
+                    </div>
+                    <div
+                      style={{
+                        height: 7,
+                        borderRadius: 999,
+                        background: '#e5e7eb',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${Math.round((score.redditPoints / 30) * 100)}%`,
+                          height: '100%',
+                          background: '#FF9600',
+                          borderRadius: 999,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Barra Redes Sociales & Guías */}
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '.78rem',
+                        fontWeight: 700,
+                        color: '#222222',
+                        marginBottom: 3,
+                      }}
+                    >
+                      <span>📱 Redes Sociales & Guías Locales (Qué Plan Tegus / IG / TikTok)</span>
+                      <span style={{ color: '#16a34a' }}>{score.socialPoints} / 25 pts</span>
+                    </div>
+                    <div
+                      style={{
+                        height: 7,
+                        borderRadius: 999,
+                        background: '#e5e7eb',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${Math.round((score.socialPoints / 25) * 100)}%`,
+                          height: '100%',
+                          background: '#58CC02',
+                          borderRadius: 999,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Críticas honestas / Ojo cuando existen */}
+                {parsedReason.caveat && (
+                  <div
+                    style={{
+                      marginTop: '.6rem',
+                      padding: '.55rem .75rem',
+                      borderRadius: 10,
+                      background: '#fffbeb',
+                      border: '1px solid #fde68a',
+                      color: '#b45309',
+                      fontSize: '.82rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    ⚠️ {parsedReason.caveat}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Evidencias y comentarios verificados */}
+          {detail && detail.evidences.length > 0 && (
+            <>
+              <hr style={{ border: 'none', borderTop: '1px solid #ebebeb' }} />
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '.65rem', color: '#222222' }}>
+                  Lo que dice la gente ({detail.evidences.length + placeReviews.length})
+                </h3>
+                <div style={{ display: 'grid', gap: '.6rem' }}>
+                  {detail.evidences.map((ev) => (
+                    <div
+                      key={ev.id}
+                      style={{
+                        padding: '.75rem .9rem',
+                        borderRadius: 12,
+                        background: '#f7f7f9',
+                        border: '1px solid #ebebeb',
+                        fontSize: '.85rem',
+                      }}
+                    >
+                      <div style={{ color: '#222222', fontWeight: 500 }}>
+                        “{ev.extractedSnippet}”
+                      </div>
+                      <div style={{ fontSize: '.76rem', color: '#717171', marginTop: '.3rem', fontWeight: 700 }}>
+                        {SOURCE_LABELS[ev.sourceType] ?? ev.sourceName}
+                      </div>
+                    </div>
+                  ))}
+                  {placeReviews.map((rev) => (
+                    <div
+                      key={rev.id}
+                      style={{
+                        padding: '.75rem .9rem',
+                        borderRadius: 12,
+                        background: '#ecfdf5',
+                        border: '1px solid #bbf7d0',
+                        fontSize: '.85rem',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: '#15803d' }}>
+                        {rev.userName ?? 'Viajero Exploro'} · ✓ Experiencia propia
+                      </div>
+                      {rev.comment && (
+                        <div style={{ color: '#222222', marginTop: 2 }}>“{rev.comment}”</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Botón discreto para dejar opinión propia (Fase 5) */}
+                <div style={{ marginTop: '.85rem' }}>
+                  {!showReviewModal ? (
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => void handleStartActivity()}
+                      style={{ fontSize: '.8rem' }}
+                    >
+                      ✍️ ¿Ya fuiste? Calificar este lugar
+                    </button>
                   ) : (
-                    ' • sin enlace público'
+                    <form
+                      onSubmit={(e) => void handleCompleteReview(e)}
+                      style={{
+                        marginTop: '.5rem',
+                        padding: '.9rem',
+                        borderRadius: 14,
+                        background: '#f7f7f9',
+                        border: '1px solid #e5e5e5',
+                        display: 'grid',
+                        gap: '.55rem',
+                      }}
+                    >
+                      <strong style={{ fontSize: '.88rem' }}>Comparte tu opinión rápida</strong>
+                      <input
+                        className="field"
+                        type="text"
+                        placeholder="¿Qué plato o experiencia recomiendas?"
+                        value={recommendedItem}
+                        onChange={(e) => setRecommendedItem(e.target.value)}
+                      />
+                      <textarea
+                        className="field"
+                        rows={2}
+                        placeholder="Tu comentario para otros usuarios..."
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                      />
+                      <div style={{ display: 'flex', gap: '.5rem' }}>
+                        <button type="submit" className="btn btn-primary" disabled={submittingReview}>
+                          {submittingReview ? 'Enviando…' : 'Publicar'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setShowReviewModal(false)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
                   )}
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              </div>
+            </>
+          )}
 
-      {detail.establishment && (
-        <section>
-          <strong>Establecimiento</strong>
-          <div>Especialidades: {detail.establishment.specialties.join(', ') || 'sin datos'}</div>
-          <div>Horario: {detail.establishment.openingHours ? 'disponible' : 'sin verificar'}</div>
-        </section>
-      )}
+          {error && (
+            <div role="alert" className="alert alert-warn" style={{ fontSize: '.82rem' }}>
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
 
-      {detail.activities.length > 0 && (
-        <section>
-          <strong>Actividades sugeridas</strong>
-          <ul style={{ paddingLeft: '1.1rem' }}>
-            {detail.activities.map((a) => (
-              <li key={a.id}>
-                {a.title} —{' '}
-                {a.estimatedDurationMins !== null ? `${a.estimatedDurationMins} min` : 'duración sin datos'} •{' '}
-                {TIME_OF_DAY[a.bestTimeOfDay] ?? a.bestTimeOfDay}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* 3. BARRA INFERIOR FIJA ESTILO AIRBNB: Precio a la izquierda + Un simple botón «Ir ahora» a la derecha */}
+      <div
+        style={{
+          borderTop: '1px solid #ebebeb',
+          background: '#ffffff',
+          padding: '0.9rem 1.35rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '1rem',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: '1.12rem',
+              fontWeight: 800,
+              color: '#222222',
+              textDecoration: 'underline',
+            }}
+          >
+            {formatCleanPrice(activePlace)}
+          </div>
+          <div style={{ fontSize: '.78rem', color: '#717171', marginTop: 1 }}>
+            {activePlace.categorySlug === 'comida' ? 'Promedio por persona' : 'Costo estimado'}
+            {distanceLabel ? ` · a ${distanceLabel}` : ''}
+          </div>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '.3rem',
+              marginTop: 4,
+              background: '#f4f4f5',
+              padding: '2px 8px',
+              borderRadius: 999,
+              fontSize: '.72rem',
+              fontWeight: 700,
+              color: '#222222',
+            }}
+          >
+            ✓ Ruta directa disponible
+          </div>
+        </div>
 
-      {detail.scoreSummary.topNegativeAspects.length > 0 && (
-        <section>
-          <strong>A tener en cuenta</strong>
-          <div>{detail.scoreSummary.topNegativeAspects.join(' • ')}</div>
-        </section>
-      )}
+        <div style={{ textAlign: 'center' }}>
+          <a
+            href={googleMapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="airbnb-ir-ahora-btn"
+          >
+            Ir ahora
+          </a>
+          <div style={{ marginTop: 4, fontSize: '.72rem', color: '#717171' }}>
+            o abrir en{' '}
+            <a
+              href={wazeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#222222', fontWeight: 700, textDecoration: 'underline' }}
+            >
+              Waze
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
   );
+
+  if (onClose) {
+    return (
+      <div
+        className="airbnb-detail-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Detalles de ${cleanTitle}`}
+        onClick={onClose}
+      >
+        {content}
+      </div>
+    );
+  }
+
+  return content;
 }

@@ -82,38 +82,38 @@ const CATEGORY_VISUALS: Record<
 > = {
   comida: {
     emoji: '🍕',
-    accent: '#f97316',
-    bg: 'rgba(249, 115, 22, 0.16)',
+    accent: '#FF385C',
+    bg: '#fff1f2',
     shortDesc: 'Mariscos, pizzerías, hamburguesas, sushi, cafés y alitas (Top verificados)',
   },
   turismo: {
     emoji: '🧭',
-    accent: '#38bdf8',
-    bg: 'rgba(56, 189, 248, 0.16)',
+    accent: '#1CB0F6',
+    bg: '#f0f9ff',
     shortDesc: 'Miradores, naturaleza, museos y sitios mayas',
   },
   entretenimiento: {
     emoji: '🎭',
-    accent: '#a855f7',
-    bg: 'rgba(168, 85, 247, 0.16)',
+    accent: '#9333ea',
+    bg: '#faf5ff',
     shortDesc: 'Teatro, cines VIP, música en vivo y vida nocturna',
   },
   actividades: {
     emoji: '🛶',
-    accent: '#10b981',
-    bg: 'rgba(16, 185, 129, 0.16)',
+    accent: '#58CC02',
+    bg: '#f0fdf4',
     shortDesc: 'Senderismo en pinares, caminatas ecológicas y aire libre',
   },
   eventos: {
     emoji: '🎪',
-    accent: '#eab308',
-    bg: 'rgba(234, 179, 8, 0.16)',
+    accent: '#FF9600',
+    bg: '#fff7ed',
     shortDesc: 'Ferias gastronómicas, conciertos y agenda cultural',
   },
   compras: {
     emoji: '🛍️',
-    accent: '#ec4899',
-    bg: 'rgba(236, 72, 153, 0.16)',
+    accent: '#e11d48',
+    bg: '#fff1f2',
     shortDesc: 'Centros comerciales, artesanías lencas y café de especialidad',
   },
 };
@@ -369,18 +369,18 @@ export default function ExploroHomePage(): React.JSX.Element {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '1.35rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
-            Exploro
+          <span style={{ fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#222222' }}>
+            Exploro<span style={{ color: '#FF385C' }}>.</span>
           </span>
           <span
             className="badge"
-            style={{ background: 'rgba(56,189,248,.16)', color: '#38bdf8' }}
+            style={{ background: '#fff1f2', color: '#FF385C', border: '1px solid #ffe4e6' }}
           >
             ✈️ Viajero
           </span>
           <span
             className="badge"
-            style={{ background: 'rgba(16,185,129,.14)', color: '#34d399' }}
+            style={{ background: '#ecfdf5', color: '#15803d', border: '1px solid #bbf7d0' }}
           >
             📍 {gpsStatus}
           </span>
@@ -667,9 +667,8 @@ export default function ExploroHomePage(): React.JSX.Element {
                 className="category-card-btn"
                 onClick={() => handleSelectSubcategoryCard('')}
                 style={{
-                  borderColor: 'rgba(56, 189, 248, 0.5)',
-                  background:
-                    'linear-gradient(145deg, rgba(14, 165, 233, 0.22) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                  borderColor: '#FF385C',
+                  background: '#fff1f2',
                 }}
               >
                 <div>
@@ -835,20 +834,19 @@ export default function ExploroHomePage(): React.JSX.Element {
               <div
                 className="card"
                 style={{
-                  padding: '.85rem 1rem',
-                  background:
-                    'linear-gradient(145deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.9) 100%)',
-                  borderColor: 'rgba(249, 115, 22, 0.35)',
+                  padding: '1rem 1.15rem',
+                  background: '#ffffff',
+                  borderColor: '#ebebeb',
                   display: 'grid',
-                  gap: '.6rem',
+                  gap: '.65rem',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.4rem' }}>
-                  <div style={{ fontWeight: 800, fontSize: '.9rem', color: '#f8fafc' }}>
-                    🎯 Selección rápida según lo que tengas ganas de comer (Radio 5 km • Col. Florencia Norte)
+                  <div style={{ fontWeight: 800, fontSize: '.94rem', color: '#222222' }}>
+                    🎯 Selección rápida según lo que tengas ganas de comer (Radio 5 km · Col. Florencia Norte)
                   </div>
-                  <span style={{ fontSize: '.74rem', color: '#94a3b8' }}>
-                    Combinando reseñas verificadas, Reddit (r/Honduras), Qué Plan Tegus y relación calidad-precio
+                  <span style={{ fontSize: '.76rem', color: '#717171', fontWeight: 600 }}>
+                    Puntaje combinado: Google Maps (45%) + Reddit r/Honduras (30%) + Redes Sociales y Qué Plan Tegus (25%)
                   </span>
                 </div>
 
@@ -856,7 +854,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                   style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
-                    gap: '.45rem',
+                    gap: '.5rem',
                   }}
                 >
                   {QUICK_CRAVING_PICKS.map((pick) => {
@@ -868,20 +866,21 @@ export default function ExploroHomePage(): React.JSX.Element {
                         onClick={() => focusPlace(pick.slug)}
                         style={{
                           textAlign: 'left',
-                          padding: '.48rem .68rem',
-                          borderRadius: 10,
-                          background: active
-                            ? 'rgba(249, 115, 22, 0.22)'
-                            : 'rgba(15, 23, 42, 0.75)',
+                          padding: '.55rem .75rem',
+                          borderRadius: 12,
+                          background: active ? '#fff1f2' : '#f7f7f9',
                           border: active
-                            ? '1px solid #f97316'
-                            : '1px solid rgba(148, 163, 184, 0.22)',
-                          color: '#f8fafc',
+                            ? '2px solid #FF385C'
+                            : '1.5px solid #e5e5e5',
+                          borderBottomWidth: 3,
+                          color: '#222222',
                           cursor: 'pointer',
                         }}
                       >
-                        <div style={{ fontSize: '.72rem', color: '#94a3b8' }}>{pick.craving}</div>
-                        <div style={{ fontSize: '.84rem', fontWeight: 800, color: '#fb923c' }}>
+                        <div style={{ fontSize: '.72rem', color: '#717171', fontWeight: 600 }}>
+                          {pick.craving}
+                        </div>
+                        <div style={{ fontSize: '.86rem', fontWeight: 800, color: '#FF385C' }}>
                           → {pick.placeLabel}
                         </div>
                       </button>

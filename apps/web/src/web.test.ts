@@ -6,9 +6,11 @@ import {
 import {
   buildGoogleMapsUrl,
   buildWazeUrl,
+  computeMultiSourceScore,
   DEFAULT_RADIUS_KM,
   formatDistanceKm,
   formatDistanceUS,
+  getPlacePhotoGallery,
   milesToKm,
   parseRecommendationReason,
   RADIUS_OPTIONS_MI,
@@ -62,5 +64,25 @@ describe('@exploro/web — Formato para EE. UU. (Fase 2)', () => {
     );
     expect(parsed.choiceReason).toBe('Lo elegiría para: comer algo informal.');
     expect(parsed.caveat).toBe('Ojo: hay críticas sobre mantenimiento del local.');
+
+    const score = computeMultiSourceScore({
+      slug: 'el-morito-la-hacienda-tegucigalpa',
+      tags: ['★ 4.8 (14,204 reseñas)', 'Qué Plan Tegus', 'Reddit r/Honduras'],
+      recommendationReason: 'Lo elegiría para: una buena comida en pareja o familia.',
+      recommendationCount: 6,
+      confidenceLevel: 'HIGH',
+    });
+    expect(score.mapsStars).toBe(4.8);
+    expect(score.mapsPoints).toBeGreaterThanOrEqual(40);
+    expect(score.redditPoints).toBeGreaterThanOrEqual(25);
+    expect(score.socialPoints).toBeGreaterThanOrEqual(20);
+    expect(score.totalScore).toBeGreaterThanOrEqual(90);
+
+    const gallery = getPlacePhotoGallery({
+      slug: 'el-morito-la-hacienda-tegucigalpa',
+      categorySlug: 'comida',
+      imageUrl: null,
+    });
+    expect(gallery.length).toBeGreaterThanOrEqual(4);
   });
 });

@@ -169,8 +169,8 @@ export function FiltersBar({
           gap: '.5rem',
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: '.92rem', color: '#38bdf8' }}>
-          🎛️ Filtros del Mapa (Radio por defecto: 5 km a la redonda • Orden: Recomendados)
+        <div style={{ fontWeight: 800, fontSize: '.92rem', color: '#222222' }}>
+          🎛️ Filtros del Mapa (Radio por defecto: 5 km a la redonda · Orden: Puntaje Maps + Reddit + Redes)
         </div>
         {onClose && (
           <button
@@ -284,14 +284,14 @@ export function FiltersBar({
                 top: '100%',
                 left: 0,
                 right: 0,
-                background: '#131c31',
-                border: '1px solid #334155',
-                borderRadius: '8px',
+                background: '#ffffff',
+                border: '1.5px solid #e5e5e5',
+                borderRadius: '12px',
                 zIndex: 50,
                 margin: '4px 0 0',
                 padding: '4px 0',
                 listStyle: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
               }}
             >
               {suggestions.map((sug) => (
@@ -305,7 +305,7 @@ export function FiltersBar({
                       padding: '8px 12px',
                       background: 'transparent',
                       border: 'none',
-                      color: '#f8fafc',
+                      color: '#222222',
                       fontSize: '.85rem',
                       cursor: 'pointer',
                       display: 'flex',
@@ -314,10 +314,10 @@ export function FiltersBar({
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 600 }}>{sug.title}</div>
-                      <div style={{ color: '#94a3b8', fontSize: '.75rem' }}>{sug.subtitle}</div>
+                      <div style={{ fontWeight: 700 }}>{sug.title}</div>
+                      <div style={{ color: '#717171', fontSize: '.75rem' }}>{sug.subtitle}</div>
                     </div>
-                    <span style={{ fontSize: '.75rem', color: '#38bdf8' }}>
+                    <span style={{ fontSize: '.75rem', color: '#FF385C', fontWeight: 700 }}>
                       {sug.type === 'city' ? 'Ciudad' : 'Lugar'}
                     </span>
                   </button>

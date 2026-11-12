@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { ExploroApiClient } from '@exploro/api-client';
 import { CollectionDTO, Coordinates, PlaceCardDTO } from '@exploro/shared-types';
 import {
-  buildGoogleMapsUrl,
-  buildWazeUrl,
+  computeMultiSourceScore,
   formatDistanceKm,
+  getPlacePhotoGallery,
   parseRecommendationReason,
 } from '../lib/format';
 import { PlaceDetail } from './PlaceDetail';
@@ -25,21 +25,10 @@ interface Props {
   onCalculateRoute?: (coords: Coordinates, name: string) => void;
 }
 
-const CONFIDENCE_LABELS: Record<PlaceCardDTO['confidenceLevel'], string> = {
-  HIGH: 'Respaldo alto',
-  MEDIUM: 'Respaldo medio',
-  LOW: 'Respaldo en validación',
-};
-
 function formatPriceRange(place: PlaceCardDTO): string {
-  if (place.priceStatus !== 'CONFIRMED') return 'Precio no disponible';
+  if (place.priceStatus !== 'CONFIRMED') return 'Consultar precio';
   if (place.priceTier === 'FREE') return 'Gratis';
   if (place.avgPriceMin !== null && place.avgPriceMax !== null) {
-    const approxLpsMin = Math.round(place.avgPriceMin * 25);
-    const approxLpsMax = Math.round(place.avgPriceMax * 25);
-    if (place.cityName.includes('Tegucigalpa') || place.cityName.includes('San Pedro') || place.cityName.includes('Roatán') || place.cityName.includes('Copán')) {
-      return `~L${approxLpsMin}–L${approxLpsMax} ($${place.avgPriceMin}–$${place.avgPriceMax})`;
-    }
     return `$${place.avgPriceMin}–$${place.avgPriceMax} ${place.currencyCode}`;
   }
   return place.priceTier;
@@ -51,264 +40,278 @@ export function PlaceCard({
   client,
   isFavorite,
   isLoggedIn,
-  collections,
+  collections: _collections,
   highlight = false,
   onToggleFavorite,
-  onAddToCollection,
+  onAddToCollection: _onAddToCollection,
   onRequireLogin,
   onCalculateRoute,
 }: Props): React.JSX.Element {
   const [openDetail, setOpenDetail] = useState(false);
   const distanceLabel = formatDistanceKm(place.distanceMeters);
   const parsedReason = parseRecommendationReason(place.recommendationReason);
-  const wazeUrl = buildWazeUrl(place.coordinates.lat, place.coordinates.lng);
-  const googleMapsUrl = buildGoogleMapsUrl(place.coordinates.lat, place.coordinates.lng);
+  const score = computeMultiSourceScore(place);
+  const heroPhoto = getPlacePhotoGallery(place)[0]!;
+  const cleanTitle = place.name.replace(/^\d+\.\s*/, '');
 
   return (
-    <article
-      className="card"
-      style={{
-        padding: '1.15rem',
-        display: 'grid',
-        gap: '.68rem',
-        borderColor: highlight ? 'var(--accent)' : undefined,
-        boxShadow: highlight ? '0 0 0 2px rgba(56, 189, 248, 0.35)' : undefined,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {rank !== undefined && (
+    <>
+      <article
+        className="airbnb-place-card"
+        onClick={() => setOpenDetail(true)}
+        style={{
+          borderColor: highlight ? '#FF385C' : '#ebebeb',
+          boxShadow: highlight
+            ? '0 0 0 2.5px #FF385C, 0 12px 28px rgba(255, 56, 92, 0.16)'
+            : undefined,
+        }}
+      >
+        {/* Imagen superior estilo Airbnb con badges flotantes */}
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: 205,
+            background: '#f4f4f5',
+            overflow: 'hidden',
+          }}
+        >
+          <img
+            src={heroPhoto}
+            alt={cleanTitle}
+            loading="lazy"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+
+          {/* Ranking + Puntaje Multi-Fuente en esquina superior izquierda */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 12,
+              left: 12,
+              display: 'flex',
+              gap: 6,
+              alignItems: 'center',
+            }}
+          >
+            {rank !== undefined && (
+              <span
+                style={{
+                  background: rank === 1 ? '#FFC800' : 'rgba(255, 255, 255, 0.95)',
+                  color: '#222222',
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  fontSize: '.75rem',
+                  fontWeight: 800,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                }}
+              >
+                {rank === 1 ? '🏆 #1 Favorito' : `#${rank}`}
+              </span>
+            )}
             <span
-              className="badge"
               style={{
-                background: rank === 1 ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : 'rgba(56, 189, 248, 0.2)',
-                color: rank === 1 ? '#fff' : '#38bdf8',
+                background: 'rgba(34, 34, 34, 0.86)',
+                color: '#ffffff',
+                padding: '4px 10px',
+                borderRadius: 999,
+                fontSize: '.74rem',
                 fontWeight: 800,
               }}
             >
-              {rank === 1 ? '🏆 #1 Recomendado' : `#${rank}`}
+              {score.totalScore} pts
             </span>
-          )}
-          <span className="badge badge-verified">{place.categoryName}</span>
-          {place.subcategoryName ? (
-            <span className="badge" style={{ background: 'rgba(148,163,184,.15)' }}>
-              {place.subcategoryName}
-            </span>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          className="btn"
-          aria-pressed={isFavorite}
-          onClick={() => (isLoggedIn ? onToggleFavorite(place) : onRequireLogin())}
-          style={{ padding: '.3rem .65rem', fontSize: '.82rem' }}
-        >
-          {isFavorite ? '♥ Guardado' : '♡ Guardar'}
-        </button>
-      </div>
-
-      <div>
-        <h3 style={{ fontSize: '1.14rem', fontWeight: 800 }}>{place.name}</h3>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '.83rem', marginTop: '.15rem' }}>
-          {place.addressText ?? place.cityName}
-          {distanceLabel ? (
-            <strong style={{ color: '#34d399', marginLeft: '.45rem' }}>
-              • 📍 a {distanceLabel}
-            </strong>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Tags / Calificación / Fuentes (Reddit, Qué Plan Tegus, Reseñas) */}
-      {place.tags.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem' }}>
-          {place.tags.map((tag) => {
-            const isStar = tag.startsWith('★');
-            const isReddit = tag.toLowerCase().includes('reddit');
-            const isQuePlan = tag.toLowerCase().includes('qué plan');
-            return (
-              <span
-                key={tag}
-                className="badge"
-                style={{
-                  fontSize: '.73rem',
-                  background: isStar
-                    ? 'rgba(250, 204, 21, 0.16)'
-                    : isReddit
-                      ? 'rgba(249, 115, 22, 0.18)'
-                      : isQuePlan
-                        ? 'rgba(16, 185, 129, 0.16)'
-                        : 'rgba(148, 163, 184, 0.12)',
-                  color: isStar
-                    ? '#fde047'
-                    : isReddit
-                      ? '#fb923c'
-                      : isQuePlan
-                        ? '#34d399'
-                        : '#cbd5e1',
-                  border: isStar
-                    ? '1px solid rgba(250, 204, 21, 0.35)'
-                    : isReddit
-                      ? '1px solid rgba(249, 115, 22, 0.35)'
-                      : isQuePlan
-                        ? '1px solid rgba(16, 185, 129, 0.35)'
-                        : '1px solid rgba(148, 163, 184, 0.2)',
-                }}
-              >
-                {tag}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      <p style={{ color: 'var(--text-secondary)', fontSize: '.9rem', lineHeight: 1.45 }}>
-        {place.description}
-      </p>
-
-      {/* Bloque asertivo: Lo elegiría para + Respaldo + Ojo (críticas honestas) */}
-      <div
-        style={{
-          fontSize: '.84rem',
-          padding: '.65rem .8rem',
-          borderRadius: 10,
-          background: 'rgba(14, 165, 233, 0.09)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
-          display: 'grid',
-          gap: '.35rem',
-        }}
-      >
-        <div style={{ color: '#f8fafc', fontWeight: 600 }}>
-          💡 {parsedReason.choiceReason}
-        </div>
-        {parsedReason.backing && (
-          <div style={{ color: '#94a3b8', fontSize: '.79rem' }}>
-            📊 {parsedReason.backing}
           </div>
-        )}
-        {parsedReason.caveat && (
+
+          {/* Botón corazón estilo Airbnb esquina superior derecha */}
+          <button
+            type="button"
+            aria-label="Guardar en favoritos"
+            aria-pressed={isFavorite}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isLoggedIn) onToggleFavorite(place);
+              else onRequireLogin();
+            }}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: 'rgba(255, 255, 255, 0.92)',
+              border: 'none',
+              color: isFavorite ? '#FF385C' : '#222222',
+              fontSize: '1.1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            }}
+          >
+            {isFavorite ? '♥' : '♡'}
+          </button>
+
+          {/* Píldora de distancia en esquina inferior izquierda */}
+          {distanceLabel && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 10,
+                left: 12,
+                background: 'rgba(255, 255, 255, 0.94)',
+                color: '#222222',
+                padding: '3px 10px',
+                borderRadius: 999,
+                fontSize: '.75rem',
+                fontWeight: 800,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+              }}
+            >
+              📍 A {distanceLabel}
+            </div>
+          )}
+        </div>
+
+        {/* Cuerpo editorial limpio estilo Airbnb + Píldoras de puntaje Duolingo */}
+        <div style={{ padding: '1rem 1.1rem 1.15rem', display: 'grid', gap: '.55rem', flex: 1 }}>
+          {/* Fila 1: Título + Estrellas Maps */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '.5rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#222222', lineHeight: 1.25 }}>
+              {cleanTitle}
+            </h3>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                fontSize: '.86rem',
+                fontWeight: 800,
+                color: '#222222',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ★ {score.mapsStars}
+            </span>
+          </div>
+
+          <div style={{ fontSize: '.8rem', color: '#717171', marginTop: -2 }}>
+            {place.addressText ?? place.cityName} · {score.mapsReviewsLabel}
+          </div>
+
+          {/* Desglose compacto del Puntaje Multi-Fuente (Maps + Reddit + Redes) */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem' }}>
+            <span
+              style={{
+                fontSize: '.71rem',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: '#f0f9ff',
+                color: '#0369a1',
+                border: '1px solid #bae6fd',
+              }}
+            >
+              📍 Maps {score.mapsPoints}/45
+            </span>
+            <span
+              style={{
+                fontSize: '.71rem',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: '#fff7ed',
+                color: '#c2410c',
+                border: '1px solid #fed7aa',
+              }}
+            >
+              💬 Reddit {score.redditPoints}/30
+            </span>
+            <span
+              style={{
+                fontSize: '.71rem',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: '#f0fdf4',
+                color: '#15803d',
+                border: '1px solid #bbf7d0',
+              }}
+            >
+              📱 Redes {score.socialPoints}/25
+            </span>
+          </div>
+
+          {/* Razón asertiva: Lo elegiría para */}
           <div
             style={{
-              marginTop: '.15rem',
-              padding: '.35rem .55rem',
-              borderRadius: 6,
-              background: 'rgba(245, 158, 11, 0.14)',
-              border: '1px solid rgba(245, 158, 11, 0.35)',
-              color: '#fcd34d',
-              fontSize: '.78rem',
-              fontWeight: 600,
+              fontSize: '.82rem',
+              color: '#222222',
+              background: '#f7f7f9',
+              padding: '.55rem .7rem',
+              borderRadius: 10,
+              border: '1px solid #ebebeb',
+              lineHeight: 1.38,
             }}
           >
-            ⚠️ {parsedReason.caveat}
+            <strong>💡 {parsedReason.choiceReason}</strong>
+            {parsedReason.caveat && (
+              <div style={{ color: '#b45309', fontSize: '.76rem', marginTop: 4, fontWeight: 700 }}>
+                ⚠️ {parsedReason.caveat}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '.5rem',
-          fontSize: '.78rem',
-          color: 'var(--text-secondary)',
-          alignItems: 'center',
-        }}
-      >
-        <span>💵 {formatPriceRange(place)}</span>
-        <span>• {CONFIDENCE_LABELS[place.confidenceLevel]}</span>
-      </div>
-
-      {/* Botones directos de navegación Waze y Google Maps ($0.00) + Ficha */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '.5rem',
-          alignItems: 'center',
-          paddingTop: '.2rem',
-        }}
-      >
-        <a
-          href={wazeUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn"
-          style={{
-            padding: '.42rem .85rem',
-            fontSize: '.82rem',
-            fontWeight: 700,
-            background: 'rgba(56, 189, 248, 0.16)',
-            borderColor: 'rgba(56, 189, 248, 0.45)',
-            color: '#38bdf8',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '.35rem',
-          }}
-        >
-          🚗 Ir con Waze
-        </a>
-
-        <a
-          href={googleMapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn"
-          style={{
-            padding: '.42rem .85rem',
-            fontSize: '.82rem',
-            fontWeight: 700,
-            background: 'rgba(16, 185, 129, 0.15)',
-            borderColor: 'rgba(16, 185, 129, 0.45)',
-            color: '#34d399',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '.35rem',
-          }}
-        >
-          🗺️ Google Maps
-        </a>
-
-        <button
-          type="button"
-          className="btn"
-          onClick={() => setOpenDetail((v) => !v)}
-          style={{ padding: '.4rem .8rem', fontSize: '.82rem' }}
-        >
-          {openDetail ? 'Ocultar ficha' : 'Ver ficha y reseñas'}
-        </button>
-
-        {isLoggedIn && collections.length > 0 ? (
-          <select
-            className="field"
-            style={{ width: 'auto', padding: '.35rem .65rem', fontSize: '.82rem' }}
-            defaultValue=""
-            aria-label={`Añadir ${place.name} a una colección`}
-            onChange={(e) => {
-              if (e.target.value) {
-                onAddToCollection(e.target.value, place);
-                e.currentTarget.value = '';
-              }
+          {/* Pie de tarjeta: Precio + Ver detalles (abre vista Airbnb) */}
+          <div
+            style={{
+              marginTop: 'auto',
+              paddingTop: '.35rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}
           >
-            <option value="">+ A colección…</option>
-            {collections.map((col) => (
-              <option key={col.id} value={col.id}>
-                {col.name}
-              </option>
-            ))}
-          </select>
-        ) : null}
-      </div>
+            <div>
+              <span style={{ fontWeight: 800, fontSize: '.92rem', color: '#222222', textDecoration: 'underline' }}>
+                {formatPriceRange(place)}
+              </span>
+              <span style={{ fontSize: '.76rem', color: '#717171' }}> · por persona</span>
+            </div>
 
-      {openDetail ? (
+            <span
+              style={{
+                fontSize: '.82rem',
+                fontWeight: 800,
+                color: '#FF385C',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              Ver detalles →
+            </span>
+          </div>
+        </div>
+      </article>
+
+      {openDetail && (
         <PlaceDetail
           slug={place.slug}
+          initialCard={place}
           client={client}
+          isFavorite={isFavorite}
+          onToggleFavorite={() => (isLoggedIn ? onToggleFavorite(place) : onRequireLogin())}
+          onClose={() => setOpenDetail(false)}
           onCalculateRoute={onCalculateRoute}
         />
-      ) : null}
-    </article>
+      )}
+    </>
   );
 }

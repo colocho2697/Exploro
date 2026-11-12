@@ -10,18 +10,19 @@ interface Props {
 }
 
 /**
- * Paso 1: Selección de modalidad en tarjetas visuales compactas sin scroll.
+ * Paso 1: Selección de modalidad en tarjetas táctiles estilo Airbnb + Duolingo (Fondo Blanco).
  */
 export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.Element {
   return (
     <main
       style={{
         minHeight: '100dvh',
+        background: '#ffffff',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: '1.25rem',
+        padding: '1.5rem',
       }}
     >
       <div style={{ maxWidth: 680, width: '100%', textAlign: 'center' }}>
@@ -29,50 +30,53 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '.5rem',
-            marginBottom: '.85rem',
+            gap: '.55rem',
+            marginBottom: '1rem',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
           }}
         >
           <span
             className="badge"
             style={{
-              background: 'rgba(16,185,129,.16)',
-              color: '#34d399',
-              border: '1px solid rgba(16,185,129,.3)',
-              padding: '.3rem .8rem',
+              background: '#fff1f2',
+              color: '#FF385C',
+              border: '1.5px solid #ffe4e6',
+              padding: '.35rem .85rem',
             }}
           >
-            🇭🇳 Honduras & 🇺🇸 EE. UU. • Basado en Evidencias
+            🇭🇳 Honduras & 🇺🇸 EE. UU. · Maps + Reddit + Redes
           </span>
           <span className="step-pill-bar">Paso 1 de 3</span>
         </div>
 
         <h1
           style={{
-            fontSize: 'clamp(2rem, 5vw, 3rem)',
+            fontSize: 'clamp(2.2rem, 5vw, 3.2rem)',
             fontWeight: 800,
-            letterSpacing: '-0.02em',
+            letterSpacing: '-0.03em',
+            color: '#222222',
             marginBottom: '.5rem',
           }}
         >
-          Exploro
+          Exploro<span style={{ color: '#FF385C' }}>.</span>
         </h1>
         <p
           style={{
-            color: 'var(--text-secondary)',
-            fontSize: '.98rem',
-            maxWidth: 500,
-            margin: '0 auto 1.65rem',
+            color: '#717171',
+            fontSize: '1.02rem',
+            maxWidth: 510,
+            margin: '0 auto 1.85rem',
           }}
         >
-          Descubre lugares cercanos a tu ubicación actual paso a paso. ¿Cómo exploras hoy?
+          Descubre los mejores lugares a 5 km a la redonda combinando el puntaje de Google Maps, Reddit y redes sociales.
         </p>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-            gap: '1rem',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '1.15rem',
             textAlign: 'left',
           }}
         >
@@ -86,13 +90,13 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
                 onClick={() => onSelect(m.mode)}
                 aria-disabled={!m.enabled}
                 style={{
-                  padding: '1.4rem',
-                  opacity: m.enabled ? 1 : 0.68,
+                  padding: '1.5rem',
+                  opacity: m.enabled ? 1 : 0.65,
                   borderStyle: m.enabled ? 'solid' : 'dashed',
-                  borderColor: m.enabled
-                    ? 'rgba(56,189,248,.48)'
-                    : 'rgba(148,163,184,.22)',
-                  minHeight: 168,
+                  borderColor: m.enabled ? '#e5e5e5' : '#d4d4d8',
+                  borderBottomColor: m.enabled ? '#FF385C' : '#d4d4d8',
+                  background: '#ffffff',
+                  minHeight: 185,
                 }}
               >
                 <div style={{ width: '100%' }}>
@@ -101,16 +105,15 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      marginBottom: '.6rem',
+                      marginBottom: '.75rem',
                     }}
                   >
                     <span
                       className="category-card-icon"
                       style={{
                         marginBottom: 0,
-                        background: isTraveler
-                          ? 'rgba(56,189,248,0.18)'
-                          : 'rgba(148,163,184,0.12)',
+                        background: isTraveler ? '#fff1f2' : '#f4f4f5',
+                        borderColor: isTraveler ? '#fecdd3' : '#e4e4e7',
                       }}
                     >
                       {isTraveler ? '✈️' : '🏠'}
@@ -121,32 +124,33 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
                       <span
                         className="badge"
                         style={{
-                          background: 'rgba(56,189,248,.16)',
-                          color: '#38bdf8',
+                          background: '#ecfdf5',
+                          color: '#15803d',
+                          border: '1px solid #bbf7d0',
                         }}
                       >
-                        GPS Activo • 5 km
+                        📍 GPS Activo · 5 km
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '.35rem' }}>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#222222', marginBottom: '.35rem' }}>
                     {m.label}
                   </div>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '.88rem' }}>
+                  <p style={{ color: '#717171', fontSize: '.9rem' }}>
                     {m.subtitle}
                   </p>
                 </div>
                 <div
                   style={{
-                    marginTop: '1rem',
-                    fontWeight: 700,
-                    fontSize: '.88rem',
-                    color: m.enabled ? '#38bdf8' : '#94a3b8',
+                    marginTop: '1.1rem',
+                    fontWeight: 800,
+                    fontSize: '.9rem',
+                    color: m.enabled ? '#FF385C' : '#717171',
                   }}
                 >
                   {m.enabled
                     ? 'Elegir categoría →'
-                    : 'No habilitado en v1 (Próximamente)'}
+                    : 'Próximamente disponible'}
                 </div>
               </button>
             );
@@ -154,7 +158,7 @@ export function ModeSelection({ modes, feedback, onSelect }: Props): React.JSX.E
         </div>
 
         {feedback && (
-          <div role="alert" className="alert alert-warn" style={{ marginTop: '1.15rem' }}>
+          <div role="alert" className="alert alert-warn" style={{ marginTop: '1.2rem' }}>
             {feedback}
           </div>
         )}

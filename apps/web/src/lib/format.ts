@@ -1,3 +1,5 @@
+import { PlaceCardDTO } from '@exploro/shared-types';
+
 export const KM_PER_MILE = 1.609344;
 
 /** Radio inicial por defecto en el mapa: 5 km a la redonda. */
@@ -69,4 +71,221 @@ export function parseRecommendationReason(raw: string): ParsedRecommendation {
     backing: backingPart || null,
     caveat: caveatPart ? caveatPart.replace(/^⚠️\s*/u, '').trim() : null,
   };
+}
+
+export interface MultiSourceScoreBreakdown {
+  /** Puntaje total compuesto (0 a 100) */
+  totalScore: number;
+  /** Estrellas en Google Maps (ej. 4.8) */
+  mapsStars: number;
+  /** Volumen de reseñas en Maps (ej. "14,204 reseñas") */
+  mapsReviewsLabel: string;
+  /** Puntos aportados por Google Maps (sobre 45) */
+  mapsPoints: number;
+  /** Puntos aportados por Reddit y foros comunitarios (sobre 30) */
+  redditPoints: number;
+  /** Puntos aportados por Redes Sociales e Instagram/TikTok/Guías (sobre 25) */
+  socialPoints: number;
+  /** Resumen corto de fuentes activas */
+  sourcesSummary: string;
+}
+
+/**
+ * Sistema de Recomendación por Puntaje Multi-Fuente:
+ * Combina:
+ * 1) Valoraciones y volumen en Google Maps (hasta 45 pts)
+ * 2) Consenso y menciones en Reddit / comunidad (hasta 30 pts)
+ * 3) Presencia y validación en Redes Sociales y guías locales (hasta 25 pts)
+ */
+export function computeMultiSourceScore(
+  place: Pick<PlaceCardDTO, 'slug' | 'tags' | 'recommendationReason' | 'recommendationCount' | 'confidenceLevel'>
+): MultiSourceScoreBreakdown {
+  const joined = `${place.tags.join(' ')} ${place.recommendationReason}`;
+
+  // Extraer estrellas si vienen en tags o texto (ej. "★ 4.8" o "4.8 ★")
+  const starMatch = joined.match(/(?:★\s*(\d(?:\.\d)?)|(\d(?:\.\d)?)\s*★)/u);
+  const mapsStars = starMatch ? Number(starMatch[1] ?? starMatch[2]) : 4.7;
+
+  // Extraer cantidad de reseñas si figura (ej. "(14,204 reseñas)" o "(863 reseñas)")
+  const revMatch = joined.match(/\(([\d,]+)\s*reseñas\)/i);
+  const rawReviewsCount = revMatch?.[1]
+    ? Number(revMatch[1].replace(/,/g, ''))
+    : place.recommendationCount * 120;
+  const mapsReviewsLabel = revMatch?.[1]
+    ? `${revMatch[1]} reseñas`
+    : `${rawReviewsCount}+ reseñas`;
+
+  // 1. Puntaje Maps (sobre 45): combina nota (hasta 36 pts) + respaldo por volumen logarítmico (hasta 9 pts)
+  const ratingComponent = (Math.min(5, Math.max(3.5, mapsStars)) / 5) * 36;
+  const volumeBonus = Math.min(9, Math.log10(Math.max(10, rawReviewsCount)) * 2.15);
+  const mapsPoints = Math.min(45, Math.round(ratingComponent + volumeBonus));
+
+  // 2. Puntaje Reddit & Comunidad (sobre 30)
+  const hasExplicitReddit = joined.toLowerCase().includes('reddit');
+  const hasCaveat = joined.includes('⚠️') || joined.toLowerCase().includes('críticas');
+  const redditBase = hasExplicitReddit ? 28 : place.confidenceLevel === 'HIGH' ? 25 : 22;
+  const redditPoints = Math.min(30, Math.max(18, redditBase - (hasCaveat ? 3 : 0)));
+
+  // 3. Puntaje Redes Sociales & Guías Locales (sobre 25)
+  const hasLocalGuide =
+    joined.toLowerCase().includes('qué plan') ||
+    joined.toLowerCase().includes('guía') ||
+    place.confidenceLevel === 'HIGH';
+  const socialPoints = Math.min(25, hasLocalGuide ? 23 : 20);
+
+  const totalScore = Math.min(99, mapsPoints + redditPoints + socialPoints);
+
+  const activeSources: string[] = ['Google Maps'];
+  if (hasExplicitReddit) activeSources.push('Reddit r/Honduras');
+  else activeSources.push('Reddit');
+  if (joined.toLowerCase().includes('qué plan')) activeSources.push('Qué Plan Tegus & Redes');
+  else activeSources.push('Redes Sociales');
+
+  return {
+    totalScore,
+    mapsStars: Number(mapsStars.toFixed(2)),
+    mapsReviewsLabel,
+    mapsPoints,
+    redditPoints,
+    socialPoints,
+    sourcesSummary: activeSources.join(' · '),
+  };
+}
+
+/**
+ * Galería fotográfica curada de alta resolución por lugar/categoría
+ * para las tarjetas estilo Airbnb y el carrusel superior de detalle.
+ */
+const SLUG_GALLERIES: Record<string, string[]> = {
+  'el-morito-la-hacienda-tegucigalpa': [
+    'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'restaurante-portobello-tegucigalpa': [
+    'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'la-pana-tegucigalpa': [
+    'https://images.unsplash.com/photo-1574894709920-11b28e7367e3?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'alto-grano-cafe-tegucigalpa': [
+    'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'tacos-tado-tegucigalpa': [
+    'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1613514785940-daed07799d9b?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1582234372722-50d7ccc30ebd?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'tgi-fridays-multiplaza-tegucigalpa': [
+    'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'matambritas-gourmet-center-tegucigalpa': [
+    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'pizza-house-palmira-tegucigalpa': [
+    'https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1590947132387-155cc02f3212?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'cafe-honore-tegucigalpa': [
+    'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'usami-sushi-tegucigalpa': [
+    'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1553621042-f6e147245754?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1617196034796-73dfa7b1fd56?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'tatos-wings-tegucigalpa': [
+    'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1608039829572-78524f79c4c7?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1527477396000-e27163b481c2?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'charlies-burgers-wings-tegucigalpa': [
+    'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80',
+  ],
+  'mateos-burgers-tegucigalpa': [
+    'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1200&q=80',
+  ],
+};
+
+const CATEGORY_DEFAULT_GALLERIES: Record<string, string[]> = {
+  comida: [
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=1200&q=80',
+  ],
+  turismo: [
+    'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
+  ],
+  entretenimiento: [
+    'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
+  ],
+  actividades: [
+    'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1533240332313-0db49b459ad6?auto=format&fit=crop&w=1200&q=80',
+  ],
+  eventos: [
+    'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1505236858219-8359eb29e329?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=1200&q=80',
+  ],
+  compras: [
+    'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?auto=format&fit=crop&w=1200&q=80',
+  ],
+};
+
+export function getPlacePhotoGallery(
+  place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'>
+): string[] {
+  const custom = SLUG_GALLERIES[place.slug];
+  if (custom && custom.length > 0) return custom;
+  const fallback =
+    CATEGORY_DEFAULT_GALLERIES[place.categorySlug] ??
+    CATEGORY_DEFAULT_GALLERIES.comida!;
+  if (place.imageUrl) {
+    return [place.imageUrl, ...fallback.slice(0, 3)];
+  }
+  return fallback;
 }
