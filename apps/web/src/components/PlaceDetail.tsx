@@ -52,13 +52,25 @@ function getCategorySubtitleLines(
   >,
   detail: PlaceDetailDTO | null
 ): { line1: string; line2: string; highlightIcon: string; highlightTitle: string } {
-  const cleanTags = place.tags
-    .filter((t) => !t.startsWith('★') && !t.startsWith('🏆'))
+  const cleanTags = (place.tags ?? [])
+    .filter(
+      (t): t is string =>
+        typeof t === 'string' &&
+        !t.startsWith('★') &&
+        !t.startsWith('🏆') &&
+        !t.startsWith('gp_photos:')
+    )
     .slice(0, 3);
 
   switch (place.categorySlug) {
     case 'comida': {
-      const specs = detail?.establishment?.specialties?.slice(0, 3) ?? cleanTags;
+      const validSpecs = (detail?.establishment?.specialties ?? [])
+        .filter(
+          (s): s is string =>
+            typeof s === 'string' && s.trim().length > 0 && !s.startsWith('{')
+        )
+        .slice(0, 3);
+      const specs = validSpecs.length > 0 ? validSpecs : cleanTags;
       return {
         line1: `Restaurante recomendado en ${place.cityName}`,
         line2:
@@ -678,7 +690,11 @@ export function PlaceDetail({
                 <div style={{ color: '#717171', fontSize: '.86rem', marginTop: 3 }}>
                   {activePlace.description}
                 </div>
-                {detail?.establishment && detail.establishment.specialties.length > 0 && (
+                {detail?.establishment &&
+                  Array.isArray(detail.establishment.specialties) &&
+                  detail.establishment.specialties.filter(
+                    (s): s is string => typeof s === 'string' && !s.startsWith('{')
+                  ).length > 0 && (
                   <div
                     style={{
                       display: 'flex',
@@ -687,9 +703,14 @@ export function PlaceDetail({
                       marginTop: '.5rem',
                     }}
                   >
-                    {detail.establishment.specialties.map((spec) => (
+                    {detail.establishment.specialties
+                      .filter(
+                        (spec): spec is string =>
+                          typeof spec === 'string' && !spec.startsWith('{')
+                      )
+                      .map((spec, sIdx) => (
                       <span
-                        key={spec}
+                        key={`${spec}-${sIdx}`}
                         style={{
                           fontSize: '.76rem',
                           fontWeight: 700,

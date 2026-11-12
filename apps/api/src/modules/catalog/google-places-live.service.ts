@@ -429,7 +429,7 @@ export class GooglePlacesLiveService {
       25,
       Math.max(18, Math.round(18 + Math.min(6, Math.round(photos.length * 1.3))))
     );
-    const overallScore = mapsPoints + redditPoints + socialPoints;
+    const overallScore = Math.min(93, mapsPoints + redditPoints + socialPoints);
 
     const summaryText =
       gp.editorialSummary?.text ||
@@ -460,12 +460,12 @@ export class GooglePlacesLiveService {
       `INSERT INTO places (
          city_id, category_id, name, normalized_name, slug, description,
          address_text, location, image_url, price_tier, avg_price_min, avg_price_max,
-         currency_code, price_status, schedule_status, verification_status, tags, is_active
+         currency_code, price_status, schedule_status, verification_status, tags, is_active, is_demo_data
        )
        VALUES (
          $1, $2, $3, $4, $5, $6,
          $7, ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography, $10, $11, $12, $13,
-         $14, 'CONFIRMED', 'CONFIRMED', 'COMMUNITY_VERIFIED', $15, TRUE
+         $14, 'CONFIRMED', 'CONFIRMED', 'COMMUNITY_VERIFIED', $15, TRUE, TRUE
        )
        ON CONFLICT (slug) DO UPDATE SET
          description = EXCLUDED.description,
@@ -528,6 +528,12 @@ export class GooglePlacesLiveService {
       ? { weekdayDescriptions: gp.regularOpeningHours.weekdayDescriptions }
       : null;
 
+    const specialtiesList: string[] = [];
+    if (gp.primaryType) {
+      specialtiesList.push(gp.primaryType.replace(/_/g, ' '));
+    }
+    specialtiesList.push('Especialidad recomendada', 'Ambiente verificado');
+
     await this.db.query(
       `INSERT INTO establishments (
          place_id, opening_hours, phone, website_url, specialties, accepts_reservations
@@ -536,13 +542,14 @@ export class GooglePlacesLiveService {
        ON CONFLICT (place_id) DO UPDATE SET
          opening_hours = EXCLUDED.opening_hours,
          phone = EXCLUDED.phone,
-         website_url = EXCLUDED.website_url`,
+         website_url = EXCLUDED.website_url,
+         specialties = EXCLUDED.specialties`,
       [
         placeId,
         openingHours ? JSON.stringify(openingHours) : null,
         gp.nationalPhoneNumber ?? null,
         gp.websiteUri ?? null,
-        JSON.stringify(photos),
+        JSON.stringify(specialtiesList.slice(0, 3)),
       ]
     );
 
