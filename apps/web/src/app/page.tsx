@@ -36,6 +36,33 @@ const CATEGORY_ICONS: Record<string, string> = {
   compras: '🛍️',
 };
 
+const SUBCATEGORY_ICONS: Record<string, string> = {
+  miradores: '🌄',
+  monumentos: '🏛️',
+  naturaleza: '🌲',
+  museos: '🖼️',
+  cultura: '🎨',
+  'pueblos-y-ciudades': '🏘️',
+  'lugares-emblematicos': '📍',
+  restaurantes: '🍽️',
+  cafeterias: '☕',
+  'comida-callejera': '🌮',
+  'bares-y-cocteles': '🍸',
+  postres: '🍰',
+  'teatro-y-shows': '🎭',
+  cines: '🎬',
+  'musica-en-vivo': '🎸',
+  'vida-nocturna': '🌙',
+  senderismo: '🥾',
+  'deportes-acuaticos': '🏄',
+  parques: '🌳',
+  ferias: '🎪',
+  conciertos: '🎟️',
+  'centros-comerciales': '🏬',
+  artesanias: '🏺',
+  mercados: '🧺',
+};
+
 const INITIAL_FILTERS: FilterValues = {
   citySlug: '',
   searchQuery: '',
@@ -445,53 +472,69 @@ export default function ExploroHomePage(): React.JSX.Element {
           />
         )}
 
-        {/* Subcategorías limpias en línea solo si la categoría actual las tiene */}
+        {/* Subcategorías agrupadas sin scrollbar ni desbordamiento horizontal */}
         {activeCategory && activeCategory.subcategories.length > 0 && (
           <div
             style={{
+              background: '#f8fafc',
+              border: '1px solid #f1f5f9',
+              borderRadius: 16,
+              padding: '0.65rem 0.85rem',
               display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
-              gap: '.4rem',
-              overflowX: 'auto',
-              paddingBottom: '.15rem',
+              gap: '0.45rem',
             }}
           >
             <button
               type="button"
               onClick={() => setSubcategorySlug('')}
               style={{
-                padding: '5px 13px',
+                padding: '6px 13px',
                 borderRadius: 999,
                 fontSize: '.78rem',
                 fontWeight: 700,
-                whiteSpace: 'nowrap',
                 border: subcategorySlug === '' ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
                 background: subcategorySlug === '' ? '#0f172a' : '#ffffff',
-                color: subcategorySlug === '' ? '#ffffff' : '#475569',
+                color: subcategorySlug === '' ? '#ffffff' : '#334155',
+                boxShadow: subcategorySlug === '' ? '0 2px 6px rgba(15,23,42,0.18)' : '0 1px 2px rgba(0,0,0,0.03)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '.3rem',
+                transition: 'all 0.15s ease',
               }}
             >
-              {t.subcategories.all}
+              <span>✨</span>
+              <span>{t.subcategories.all}</span>
             </button>
             {activeCategory.subcategories.map((sub) => {
               const active = subcategorySlug === sub.slug;
               const subDisplayName = t.subcategories[sub.slug] ?? sub.name;
+              const icon = SUBCATEGORY_ICONS[sub.slug] ?? '📍';
               return (
                 <button
                   key={sub.id}
                   type="button"
-                  onClick={() => setSubcategorySlug(sub.slug)}
+                  onClick={() => setSubcategorySlug(active ? '' : sub.slug)}
                   style={{
-                    padding: '5px 13px',
+                    padding: '6px 13px',
                     borderRadius: 999,
                     fontSize: '.78rem',
                     fontWeight: 700,
-                    whiteSpace: 'nowrap',
                     border: active ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
                     background: active ? '#0f172a' : '#ffffff',
-                    color: active ? '#ffffff' : '#475569',
+                    color: active ? '#ffffff' : '#334155',
+                    boxShadow: active ? '0 2px 6px rgba(15,23,42,0.18)' : '0 1px 2px rgba(0,0,0,0.03)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '.35rem',
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  {subDisplayName}
+                  <span>{icon}</span>
+                  <span>{subDisplayName}</span>
                 </button>
               );
             })}
