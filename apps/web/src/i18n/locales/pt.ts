@@ -237,3 +237,4 @@ export const ptDictionary: NativeDictionary = {
     confirmDeleteCollection: (name) => `Excluir o roteiro «${name}»? Os lugares salvos não serão apagados.`,
   },
 };
+

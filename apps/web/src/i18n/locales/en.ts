@@ -237,3 +237,4 @@ export const enDictionary: NativeDictionary = {
     confirmDeleteCollection: (name) => `Delete list "${name}"? Your saved places won't be deleted.`,
   },
 };
+

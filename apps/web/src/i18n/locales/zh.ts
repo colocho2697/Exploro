@@ -237,3 +237,4 @@ export const zhDictionary: NativeDictionary = {
     confirmDeleteCollection: (name) => `确定要删除清单“${name}”吗？已收藏的地点不会被删除。`,
   },
 };
+

@@ -237,3 +237,4 @@ export const deDictionary: NativeDictionary = {
     confirmDeleteCollection: (name) => `Reiseliste „${name}“ löschen? Die Orte selbst bleiben erhalten.`,
   },
 };
+

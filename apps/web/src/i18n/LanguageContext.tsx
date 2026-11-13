@@ -152,3 +152,4 @@ export function LanguageProvider({
 export function useLanguage(): LanguageContextValue {
   return useContext(LanguageContext);
 }
+

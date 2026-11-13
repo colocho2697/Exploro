@@ -237,3 +237,4 @@ export const frDictionary: NativeDictionary = {
     confirmDeleteCollection: (name) => `Supprimer le carnet « ${name} » ? Les adresses ne seront pas supprimées.`,
   },
 };
+

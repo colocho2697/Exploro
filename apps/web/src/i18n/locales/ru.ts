@@ -237,3 +237,4 @@ export const ruDictionary: NativeDictionary = {
     confirmDeleteCollection: (name) => `Удалить подборку «${name}»? Сами места останутся в каталоге.`,
   },
 };
+

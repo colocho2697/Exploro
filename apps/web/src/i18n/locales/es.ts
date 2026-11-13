@@ -237,3 +237,4 @@ export const esDictionary: NativeDictionary = {
     confirmDeleteCollection: (name) => `¿Eliminar la colección «${name}»? Los lugares no se eliminan.`,
   },
 };
+
