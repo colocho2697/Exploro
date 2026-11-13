@@ -8,6 +8,7 @@ import {
   buildWazeUrl,
   computeMultiSourceScore,
   DEFAULT_RADIUS_KM,
+  formatCleanPrice,
   formatDistanceKm,
   formatDistanceUS,
   getPlacePhotoDetails,
@@ -16,6 +17,11 @@ import {
   parseRecommendationReason,
   RADIUS_OPTIONS_MI,
 } from './lib/format';
+import {
+  DICTIONARIES,
+  resolveLocaleTag,
+  SUPPORTED_LOCALES,
+} from './i18n';
 
 
 describe('@exploro/web — Reglas de la Pantalla Inicial (Paso 1.5)', () => {
@@ -106,6 +112,55 @@ describe('@exploro/web — Formato para EE. UU. (Fase 2)', () => {
     });
     expect(routeUrl).toContain('origin=Colonia%20Florencia%20Norte%2C%20Tegucigalpa%2C%20Honduras');
     expect(routeUrl).toContain('destination=El%20Morito%20%E2%80%93%20La%20Hacienda%2C%20Boulevard%20La%20Hacienda%2C%20Tegucigalpa%2C%20Honduras');
+  });
+
+  it('soporta transcreación nativa en 7 idiomas (ES, EN, PT, FR, DE, ZH, RU) y detección de idioma del navegador', () => {
+    expect(SUPPORTED_LOCALES.map((l) => l.code)).toEqual([
+      'es',
+      'en',
+      'pt',
+      'fr',
+      'de',
+      'zh',
+      'ru',
+    ]);
+
+    // Detección de etiquetas BCP-47 regionales
+    expect(resolveLocaleTag('en-US')).toBe('en');
+    expect(resolveLocaleTag('pt-BR')).toBe('pt');
+    expect(resolveLocaleTag('fr-FR')).toBe('fr');
+    expect(resolveLocaleTag('de-DE')).toBe('de');
+    expect(resolveLocaleTag('zh-Hans-CN')).toBe('zh');
+    expect(resolveLocaleTag('ru-RU')).toBe('ru');
+    expect(resolveLocaleTag('es-HN')).toBe('es');
+    expect(resolveLocaleTag('ja-JP')).toBeNull();
+
+    // Adaptación semántica de razones de recomendación sin alterar la base de datos
+    const rawReason =
+      'Lo elegiría para: disfrutar de una propuesta gastronómica sobresaliente • Respaldo: 4.8★ | ⚠️ Ojo: Alta demanda en horas pico.';
+    const ctx = { categorySlug: 'comida', cityName: 'Buenos Aires', mapsStars: 4.8 };
+
+    const enReason = parseRecommendationReason(rawReason, 'en', ctx);
+    expect(enReason.choiceReason).toContain('Why it stands out:');
+    expect(enReason.choiceReason).toContain('Buenos Aires');
+    expect(enReason.caveat).toContain('peak hours');
+
+    const deReason = parseRecommendationReason(rawReason, 'de', ctx);
+    expect(deReason.choiceReason).toContain('Darum lohnt es sich:');
+
+    const zhReason = parseRecommendationReason(rawReason, 'zh', ctx);
+    expect(zhReason.choiceReason).toContain('推荐理由：');
+
+    const ruReason = parseRecommendationReason(rawReason, 'ru', ctx);
+    expect(ruReason.choiceReason).toContain('Почему стоит пойти:');
+
+    // Formateo nativo de precios y reseñas en todos los idiomas
+    for (const loc of SUPPORTED_LOCALES) {
+      expect(DICTIONARIES[loc.code].categories.comida.length).toBeGreaterThan(0);
+      expect(formatCleanPrice(0, 0, 'USD', 'FREE', loc.code)).toBe(
+        DICTIONARIES[loc.code].card.free
+      );
+    }
   });
 });
 

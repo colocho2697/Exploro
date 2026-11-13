@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { Coordinates, PlaceCardDTO, RouteSummary } from '@exploro/shared-types';
 import { MAP_STYLE_URL } from '../lib/api';
 import { buildGoogleMapsUrl, buildWazeUrl } from '../lib/format';
+import { useLanguage } from '../i18n';
 import { BackpackerLoader } from './BackpackerLoader';
 
 interface Props {
@@ -79,6 +80,7 @@ export default function MapView({
   onRadiusChange,
   onResetToGps,
 }: Props): React.JSX.Element {
+  const { locale, t } = useLanguage();
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
@@ -107,7 +109,7 @@ export default function MapView({
         body: JSON.stringify({
           textQuery: query,
           maxResultCount: 1,
-          languageCode: 'es',
+          languageCode: locale,
         }),
       });
       if (res.ok) {
@@ -435,7 +437,7 @@ export default function MapView({
               type="text"
               value={searchCityQuery}
               onChange={(e) => setSearchCityQuery(e.target.value)}
-              placeholder="Buscar ciudad o zona (ej. Dallas, Madrid...)"
+              placeholder={t.map.searchPlaceholder}
               style={{
                 width: '100%',
                 padding: '6px 12px 6px 30px',
@@ -475,7 +477,7 @@ export default function MapView({
                 whiteSpace: 'nowrap',
               }}
             >
-              {searchingCity ? '…' : 'Ir'}
+              {searchingCity ? '…' : t.map.searchButton}
             </button>
           )}
         </form>
@@ -511,8 +513,8 @@ export default function MapView({
             <button
               type="button"
               onClick={onResetToGps}
-              title="Centrar en mi ubicación actual"
-              aria-label="Centrar en mi ubicación actual"
+              title={t.map.gpsTooltip}
+              aria-label={t.map.gpsTooltip}
               style={{
                 width: 28,
                 height: 28,
@@ -538,7 +540,7 @@ export default function MapView({
         <div
           ref={container}
           className="map-box"
-          aria-label="Mapa interactivo con radio de búsqueda"
+          aria-label={t.map.mapAriaLabel}
         />
         {searchingCity && (
           <div
@@ -555,8 +557,8 @@ export default function MapView({
             <BackpackerLoader
               size="small"
               compact
-              message="Viajando a tu destino…"
-              submessage="Localizando en el mapa"
+              message={t.map.travelingTitle}
+              submessage={t.map.travelingSubtitle}
             />
           </div>
         )}

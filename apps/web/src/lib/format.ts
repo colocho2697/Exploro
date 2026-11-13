@@ -1,5 +1,6 @@
 import { PlaceCardDTO } from '@exploro/shared-types';
 import { GOOGLE_PLACES_PHOTOS } from './google-places-photos';
+import { DICTIONARIES, SUPPORTED_LOCALES, SupportedLocale } from '../i18n';
 
 export const KM_PER_MILE = 1.609344;
 
@@ -118,19 +119,62 @@ export interface ParsedRecommendation {
   caveat: string | null;
 }
 
+export interface PlaceReasonContext {
+  categorySlug?: string;
+  cityName?: string;
+  mapsStars?: number;
+}
+
 /**
- * Separa la explicación en:
- * - «Lo elegiría para: ...»
- * - «Respaldo: ...»
- * - «⚠️ Ojo: ...» (críticas honestas cuando existen)
+ * Separa y adapta nativamente la explicación a cada idioma:
+ * - En Español conserva el texto exacto.
+ * - En Inglés, Portugués, Francés, Alemán, Chino o Ruso, transcrea la razón
+ *   y las observaciones como si hubieran sido escritas originalmente en ese idioma.
  */
-export function parseRecommendationReason(raw: string): ParsedRecommendation {
+export function parseRecommendationReason(
+  raw: string,
+  locale: SupportedLocale = 'es',
+  context?: PlaceReasonContext
+): ParsedRecommendation {
   const [mainPart, caveatPart] = raw.split('|').map((s) => s.trim());
   const [choicePart, backingPart] = (mainPart ?? '').split('•').map((s) => s.trim());
+  const rawCaveat = caveatPart ? caveatPart.replace(/^⚠️\s*/u, '').trim() : null;
+
+  if (locale === 'es' || !context) {
+    return {
+      choiceReason: choicePart || raw,
+      backing: backingPart || null,
+      caveat: rawCaveat,
+    };
+  }
+
+  const dict = DICTIONARIES[locale] ?? DICTIONARIES.es;
+  const catKey = (
+    context.categorySlug && context.categorySlug in dict.semantic.choiceReasonByCategory
+      ? context.categorySlug
+      : 'comida'
+  ) as keyof typeof dict.semantic.choiceReasonByCategory;
+
+  const city = context.cityName || 'la ciudad';
+  const stars = context.mapsStars ?? 4.6;
+  const nativeChoice = dict.semantic.choiceReasonByCategory[catKey](city, stars);
+
+  let nativeCaveat: string | null = null;
+  if (rawCaveat) {
+    const lowerCaveat = rawCaveat.toLowerCase();
+    if (lowerCaveat.includes('demanda') || lowerCaveat.includes('temprano') || lowerCaveat.includes('fila')) {
+      nativeCaveat = dict.semantic.caveatHighDemand;
+    } else if (lowerCaveat.includes('horario') || lowerCaveat.includes('verificar') || lowerCaveat.includes('boleto')) {
+      nativeCaveat = dict.semantic.caveatVerifyHours;
+    } else {
+      nativeCaveat = dict.semantic.caveatPeakTraffic;
+    }
+  }
+
   return {
-    choiceReason: choicePart || raw,
+    choiceReason: nativeChoice,
     backing: backingPart || null,
-    caveat: caveatPart ? caveatPart.replace(/^⚠️\s*/u, '').trim() : null,
+    caveat: nativeCaveat,
   };
 }
 
@@ -272,6 +316,16 @@ const KNOWN_PLACE_SCORES: Record<string, MultiSourceScoreBreakdown> = {
   },
 };
 
+function formatLocalizedReviewNumber(count: number, locale: SupportedLocale): string {
+  const meta = SUPPORTED_LOCALES.find((l) => l.code === locale);
+  const intlCode = meta?.intlLocale ?? 'es-419';
+  try {
+    return new Intl.NumberFormat(intlCode).format(count);
+  } catch {
+    return String(count);
+  }
+}
+
 /**
  * Sistema de Recomendación por Puntaje Multi-Fuente:
  * Combina:
@@ -281,10 +335,21 @@ const KNOWN_PLACE_SCORES: Record<string, MultiSourceScoreBreakdown> = {
  * Garantiza datos reales y específicos para cada establecimiento.
  */
 export function computeMultiSourceScore(
-  place: Pick<PlaceCardDTO, 'slug' | 'tags' | 'recommendationReason' | 'recommendationCount' | 'confidenceLevel'>
+  place: Pick<PlaceCardDTO, 'slug' | 'tags' | 'recommendationReason' | 'recommendationCount' | 'confidenceLevel'>,
+  locale: SupportedLocale = 'es'
 ): MultiSourceScoreBreakdown {
+  const dict = DICTIONARIES[locale] ?? DICTIONARIES.es;
+
   if (place.slug && KNOWN_PLACE_SCORES[place.slug]) {
-    return KNOWN_PLACE_SCORES[place.slug]!;
+    const known = KNOWN_PLACE_SCORES[place.slug]!;
+    if (locale === 'es') return known;
+    const countMatch = known.mapsReviewsLabel.match(/([\d,]+)/);
+    const numCount = countMatch?.[1] ? Number(countMatch[1].replace(/,/g, '')) : 250;
+    return {
+      ...known,
+      mapsReviewsLabel: dict.semantic.reviewsCount(formatLocalizedReviewNumber(numCount, locale)),
+      sourcesSummary: dict.semantic.sourcesSummaryDefault,
+    };
   }
 
   const joined = `${place.tags.join(' ')} ${place.recommendationReason}`;
@@ -298,9 +363,17 @@ export function computeMultiSourceScore(
   const rawReviewsCount = revMatch?.[1]
     ? Number(revMatch[1].replace(/,/g, ''))
     : Math.max(50, place.recommendationCount * 120);
-  const mapsReviewsLabel = revMatch?.[1]
-    ? `${revMatch[1]} reseñas`
-    : `${rawReviewsCount}+ reseñas`;
+
+  const formattedNumber = revMatch?.[1]
+    ? formatLocalizedReviewNumber(rawReviewsCount, locale)
+    : `${formatLocalizedReviewNumber(rawReviewsCount, locale)}+`;
+
+  const mapsReviewsLabel =
+    locale === 'es'
+      ? revMatch?.[1]
+        ? `${revMatch[1]} reseñas`
+        : `${rawReviewsCount}+ reseñas`
+      : dict.semantic.reviewsCount(formattedNumber);
 
   // Si el backend ya calculó el desglose exacto Multi-Fuente (pts:Maps/Reddit/Social)
   const ptsTag = place.tags.find((t) => typeof t === 'string' && t.startsWith('pts:'));
@@ -316,7 +389,7 @@ export function computeMultiSourceScore(
         mapsPoints: mPts,
         redditPoints: rPts,
         socialPoints: sPts,
-        sourcesSummary: 'Google Maps · Reddit & Comunidad · Redes Sociales',
+        sourcesSummary: dict.semantic.sourcesSummaryDefault,
       };
     }
   }
@@ -342,10 +415,10 @@ export function computeMultiSourceScore(
   const totalScore = Math.min(99, mapsPoints + redditPoints + socialPoints);
 
   const activeSources: string[] = ['Google Maps'];
-  if (hasReddit) activeSources.push('Reddit r/Honduras');
-  else activeSources.push('Comunidad');
-  if (hasLocalGuide) activeSources.push('Guías & Redes');
-  else activeSources.push('Redes');
+  if (hasReddit) activeSources.push('Reddit');
+  else activeSources.push(dict.semantic.communitySource);
+  if (hasLocalGuide) activeSources.push(dict.semantic.guidesAndSocialSource);
+  else activeSources.push(dict.semantic.socialSource);
 
   return {
     totalScore,
@@ -358,14 +431,44 @@ export function computeMultiSourceScore(
   };
 }
 
-/** Formatea precios limpios en Lempiras (HNL) o dólares (USD) según corresponda */
+/**
+ * Redacta una descripción editorial nativa en el idioma seleccionado cuando el lugar
+ * tiene texto base en español, garantizando coherencia lingüística total.
+ */
+export function getLocalizedPlaceDescription(
+  place: Pick<PlaceCardDTO, 'name' | 'categorySlug' | 'cityName'> & { description?: string },
+  score: MultiSourceScoreBreakdown,
+  locale: SupportedLocale = 'es'
+): string {
+  if (locale === 'es' && place.description) {
+    return place.description;
+  }
+  const dict = DICTIONARIES[locale] ?? DICTIONARIES.es;
+  const cleanTitle = place.name.replace(/^\d+\.\s*/, '');
+  const catKey = (
+    place.categorySlug in dict.semantic.descriptionByCategory
+      ? place.categorySlug
+      : 'comida'
+  ) as keyof typeof dict.semantic.descriptionByCategory;
+
+  return dict.semantic.descriptionByCategory[catKey](
+    cleanTitle,
+    place.cityName,
+    score.mapsStars,
+    score.mapsReviewsLabel
+  );
+}
+
+/** Formatea precios limpios en la moneda del lugar y adaptados al idioma activo */
 export function formatCleanPrice(
   min: number | null | undefined,
   max: number | null | undefined,
   currency: string = 'HNL',
-  tier?: string
+  tier?: string,
+  locale: SupportedLocale = 'es'
 ): string {
-  if (tier === 'FREE' || (min === 0 && max === 0)) return 'Gratis';
+  const dict = DICTIONARIES[locale] ?? DICTIONARIES.es;
+  if (tier === 'FREE' || (min === 0 && max === 0)) return dict.card.free;
   if (min !== null && min !== undefined && max !== null && max !== undefined) {
     if (currency === 'HNL') {
       return `L ${Math.round(min)}–${Math.round(max)}`;
@@ -373,10 +476,10 @@ export function formatCleanPrice(
     return `$${Math.round(min)}–$${Math.round(max)} ${currency}`;
   }
   if (min !== null && min !== undefined) {
-    if (currency === 'HNL') return `Desde L ${Math.round(min)}`;
-    return `Desde $${Math.round(min)}`;
+    if (currency === 'HNL') return dict.card.fromPrice(`L ${Math.round(min)}`);
+    return dict.card.fromPrice(`$${Math.round(min)}`);
   }
-  return 'Consultar precio';
+  return dict.card.priceVaries;
 }
 
 /**

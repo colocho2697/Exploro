@@ -16,6 +16,7 @@ import { useDiscovery } from '../hooks/useDiscovery';
 import { useLibrary } from '../hooks/useLibrary';
 import { useSession } from '../hooks/useSession';
 import { DEFAULT_RADIUS_KM } from '../lib/format';
+import { SupportedLocale, useLanguage } from '../i18n';
 
 // MapLibre requiere WebGL/DOM: se carga solo en el navegador.
 const MapView = dynamic(() => import('../components/MapView'), {
@@ -45,6 +46,7 @@ const INITIAL_FILTERS: FilterValues = {
 };
 
 export default function ExploroHomePage(): React.JSX.Element {
+  const { locale, setLocale, t, supportedLocales } = useLanguage();
   const session = useSession();
   const library = useLibrary(session.client, session.user?.id ?? null, session.guard);
 
@@ -187,11 +189,11 @@ export default function ExploroHomePage(): React.JSX.Element {
         })
         .catch((err: unknown) => {
           setRouteError(
-            err instanceof Error ? err.message : 'No se pudo calcular la ruta.'
+            err instanceof Error ? err.message : t.map.routeError
           );
         });
     },
-    [filterValues.coords, discovery.places, session.client]
+    [filterValues.coords, discovery.places, session.client, t.map.routeError]
   );
 
   const activeCategory = categories.find((c) => c.slug === categorySlug);
@@ -232,8 +234,46 @@ export default function ExploroHomePage(): React.JSX.Element {
             Exploro<span style={{ color: '#10B981' }}>.</span>
           </span>
 
-          {/* Acción única de usuario (sin botones redundantes) */}
-          <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center' }}>
+          {/* Selector discreto de idioma + Acción única de usuario */}
+          <div style={{ display: 'flex', gap: '.45rem', alignItems: 'center' }}>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '.25rem',
+                padding: '5px 10px',
+                borderRadius: 999,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                fontSize: '.76rem',
+                fontWeight: 700,
+                color: '#0f172a',
+                cursor: 'pointer',
+              }}
+            >
+              <span aria-hidden="true">🌐</span>
+              <select
+                aria-label={t.header.languageSelectorAria}
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as SupportedLocale)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: '.76rem',
+                  fontWeight: 800,
+                  color: '#0f172a',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {supportedLocales.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.flag} {l.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             {session.user ? (
               <>
                 <button
@@ -249,7 +289,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                     border: '1px solid #e2e8f0',
                   }}
                 >
-                  ♥ Guardados ({library.favorites.length})
+                  {t.header.saved(library.favorites.length)}
                 </button>
                 <button
                   type="button"
@@ -264,7 +304,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                     border: '1px solid #e2e8f0',
                   }}
                 >
-                  {session.user.displayName} · Salir
+                  {session.user.displayName} · {t.header.logout}
                 </button>
               </>
             ) : (
@@ -282,7 +322,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                 }}
               >
-                Iniciar sesión
+                {t.header.signIn}
               </button>
             )}
           </div>
@@ -314,6 +354,7 @@ export default function ExploroHomePage(): React.JSX.Element {
           ).map((cat) => {
             const isSelected = categorySlug === cat.slug;
             const icon = CATEGORY_ICONS[cat.slug] ?? '✨';
+            const displayCatName = t.categories[cat.slug] ?? cat.name;
             return (
               <button
                 key={cat.id}
@@ -337,7 +378,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                 }}
               >
                 <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{icon}</span>
-                <span>{cat.name}</span>
+                <span>{displayCatName}</span>
               </button>
             );
           })}
@@ -358,7 +399,7 @@ export default function ExploroHomePage(): React.JSX.Element {
           <div role="status" className="alert alert-warn">
             {session.notice}{' '}
             <button type="button" className="btn" onClick={session.clearNotice}>
-              Cerrar
+              {t.discovery.close}
             </button>
           </div>
         )}
@@ -376,7 +417,7 @@ export default function ExploroHomePage(): React.JSX.Element {
           >
             <span>{bootError}</span>
             <button type="button" className="btn" onClick={loadCatalogAndGps}>
-              Reintentar
+              {t.discovery.retry}
             </button>
           </div>
         )}
@@ -429,10 +470,11 @@ export default function ExploroHomePage(): React.JSX.Element {
                 color: subcategorySlug === '' ? '#ffffff' : '#475569',
               }}
             >
-              Todos
+              {t.subcategories.all}
             </button>
             {activeCategory.subcategories.map((sub) => {
               const active = subcategorySlug === sub.slug;
+              const subDisplayName = t.subcategories[sub.slug] ?? sub.name;
               return (
                 <button
                   key={sub.id}
@@ -449,7 +491,7 @@ export default function ExploroHomePage(): React.JSX.Element {
                     color: active ? '#ffffff' : '#475569',
                   }}
                 >
-                  {sub.name}
+                  {subDisplayName}
                 </button>
               );
             })}
@@ -467,7 +509,7 @@ export default function ExploroHomePage(): React.JSX.Element {
             }}
           >
             <div>
-              <strong>🚗 Ruta a {routeTargetName}: </strong>
+              <strong>{t.map.routeLabel(routeTargetName)}</strong>
               <span>
                 {(activeRoute.distanceMeters / 1000).toFixed(1)} km · ~
                 {activeRoute.durationMinutes} min
@@ -482,7 +524,7 @@ export default function ExploroHomePage(): React.JSX.Element {
               }}
               style={{ padding: '.2rem .6rem', fontSize: '.75rem' }}
             >
-              Cerrar
+              {t.map.closeRoute}
             </button>
           </div>
         )}
@@ -497,7 +539,7 @@ export default function ExploroHomePage(): React.JSX.Element {
           <div role="alert" className="alert alert-error">
             {discovery.error}{' '}
             <button type="button" className="btn" onClick={discovery.reload}>
-              Reintentar
+              {t.discovery.retry}
             </button>
           </div>
         )}
@@ -528,27 +570,27 @@ export default function ExploroHomePage(): React.JSX.Element {
             >
               <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
                 {discovery.loading
-                  ? 'Buscando lugares cercanos…'
-                  : `Recomendados (${discovery.places.length})`}
+                  ? t.discovery.searchingNearby
+                  : t.discovery.recommendedCount(discovery.places.length)}
               </h2>
             </div>
 
             {discovery.loading ? (
               <BackpackerLoader
-                message="Explorando la zona…"
-                submessage="El mochilero está buscando las mejores recomendaciones verificadas cerca de ti"
+                message={t.discovery.scoutingZone}
+                submessage={t.discovery.scoutingSubtitle}
               />
             ) : !discovery.error && discovery.places.length === 0 ? (
               <div className="card" style={{ padding: '1.5rem', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '.85rem', fontSize: '.9rem' }}>
-                  No encontramos lugares en un radio de {filterValues.radiusKm} km para este punto.
+                  {t.discovery.emptyZone(filterValues.radiusKm)}
                 </p>
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={() => handleMapRadiusChange(Math.min(50, filterValues.radiusKm * 2))}
                 >
-                  Ampliar radio a {Math.min(50, filterValues.radiusKm * 2)} km
+                  {t.discovery.expandRadius(Math.min(50, filterValues.radiusKm * 2))}
                 </button>
               </div>
             ) : (

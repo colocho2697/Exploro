@@ -10,6 +10,7 @@ import {
   getPlacePhotoGallery,
   parseRecommendationReason,
 } from '../lib/format';
+import { SupportedLocale, useLanguage } from '../i18n';
 import { PlaceDetail } from './PlaceDetail';
 
 interface Props {
@@ -27,13 +28,13 @@ interface Props {
   userOrigin?: string | null;
 }
 
-function formatPriceRange(place: PlaceCardDTO): string {
-  if (place.priceStatus !== 'CONFIRMED') return 'Consultar precio';
+function formatPriceRange(place: PlaceCardDTO, locale: SupportedLocale): string {
   return formatCleanPrice(
-    place.avgPriceMin,
-    place.avgPriceMax,
+    place.priceStatus === 'CONFIRMED' ? place.avgPriceMin : null,
+    place.priceStatus === 'CONFIRMED' ? place.avgPriceMax : null,
     place.currencyCode,
-    place.priceTier
+    place.priceTier,
+    locale
   );
 }
 
@@ -51,10 +52,15 @@ export function PlaceCard({
   onCalculateRoute,
   userOrigin,
 }: Props): React.JSX.Element {
+  const { locale, t } = useLanguage();
   const [openDetail, setOpenDetail] = useState(false);
   const distanceLabel = formatDistanceKm(place.distanceMeters);
-  const parsedReason = parseRecommendationReason(place.recommendationReason);
-  const score = computeMultiSourceScore(place);
+  const score = computeMultiSourceScore(place, locale);
+  const parsedReason = parseRecommendationReason(place.recommendationReason, locale, {
+    categorySlug: place.categorySlug,
+    cityName: place.cityName,
+    mapsStars: score.mapsStars,
+  });
   const heroPhoto = getPlacePhotoGallery(place)[0]!;
   const cleanTitle = place.name.replace(/^\d+\.\s*/, '');
 
@@ -116,7 +122,7 @@ export function PlaceCard({
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                 }}
               >
-                {rank === 1 ? '#1 Top' : `#${rank}`}
+                {rank === 1 ? t.card.topPick : `#${rank}`}
               </span>
             )}
 
@@ -130,14 +136,14 @@ export function PlaceCard({
                 fontWeight: 800,
               }}
             >
-              {score.totalScore} pts
+              {score.totalScore} {t.card.pointsSuffix}
             </span>
           </div>
 
           {/* Botón corazón estilo Airbnb esquina superior derecha */}
           <button
             type="button"
-            aria-label="Guardar en favoritos"
+            aria-label={t.card.saveFavoriteAria}
             aria-pressed={isFavorite}
             onClick={(e) => {
               e.stopPropagation();
@@ -181,7 +187,7 @@ export function PlaceCard({
                 boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
               }}
             >
-              A {distanceLabel}
+              {t.card.distanceAway(distanceLabel)}
             </div>
           )}
         </div>
@@ -225,7 +231,7 @@ export function PlaceCard({
                 border: '1px solid #bae6fd',
               }}
             >
-              Maps {score.mapsPoints}/45
+              {t.card.mapsBadge} {score.mapsPoints}/45
             </span>
             <span
               style={{
@@ -238,7 +244,7 @@ export function PlaceCard({
                 border: '1px solid #fed7aa',
               }}
             >
-              Reddit {score.redditPoints}/30
+              {t.card.redditBadge} {score.redditPoints}/30
             </span>
             <span
               style={{
@@ -251,11 +257,11 @@ export function PlaceCard({
                 border: '1px solid #bbf7d0',
               }}
             >
-              Redes {score.socialPoints}/25
+              {t.card.socialBadge} {score.socialPoints}/25
             </span>
           </div>
 
-          {/* Razón asertiva: Lo elegiría para */}
+          {/* Razón asertiva adaptada nativamente */}
           <div
             style={{
               fontSize: '.82rem',
@@ -287,9 +293,9 @@ export function PlaceCard({
           >
             <div>
               <span style={{ fontWeight: 800, fontSize: '.92rem', color: '#222222', textDecoration: 'underline' }}>
-                {formatPriceRange(place)}
+                {formatPriceRange(place, locale)}
               </span>
-              <span style={{ fontSize: '.76rem', color: '#717171' }}> · por persona</span>
+              <span style={{ fontSize: '.76rem', color: '#717171' }}> · {t.card.perPerson}</span>
             </div>
 
             <span
@@ -302,7 +308,7 @@ export function PlaceCard({
                 gap: 4,
               }}
             >
-              Ver detalles →
+              {t.card.viewDetails}
             </span>
 
           </div>

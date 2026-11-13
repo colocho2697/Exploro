@@ -14,25 +14,12 @@ import {
   computeMultiSourceScore,
   formatCleanPrice,
   formatDistanceKm,
+  getLocalizedPlaceDescription,
   getPlacePhotoDetails,
   parseRecommendationReason,
 } from '../lib/format';
+import { NativeDictionary, useLanguage } from '../i18n';
 import { BackpackerLoader } from './BackpackerLoader';
-
-
-const TIME_OF_DAY: Record<string, string> = {
-  MORNING: 'Mañana',
-  AFTERNOON: 'Tarde / Atardecer',
-  NIGHT: 'Noche',
-  ANY: 'Cualquier hora',
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  EXTERNAL_COMMUNITY: 'Reddit & Comunidad',
-  BLOG: 'Blog independiente',
-  NATIVE_EXPERIENCE: 'Visita verificada Exploro',
-  CURATED: 'Guía local & Redes',
-};
 
 interface PlaceDetailProps {
   client: ExploroApiClient;
@@ -45,25 +32,27 @@ interface PlaceDetailProps {
   userOrigin?: string | null;
 }
 
-
 function getCategorySubtitleLines(
   place: Pick<
     PlaceCardDTO,
-    'categorySlug' | 'categoryName' | 'subcategoryName' | 'cityName' | 'tags'
+    'categorySlug' | 'categoryName' | 'subcategorySlug' | 'subcategoryName' | 'cityName' | 'tags'
   >,
-  detail: PlaceDetailDTO | null
+  detail: PlaceDetailDTO | null,
+  t: NativeDictionary
 ): { line1: string; line2: string; highlightIcon: string; highlightTitle: string } {
   const cleanTags = (place.tags ?? [])
     .filter(
-      (t): t is string =>
-        typeof t === 'string' &&
-        !t.startsWith('★') &&
-        !t.startsWith('🏆') &&
-        !t.startsWith('(') &&
-        !t.startsWith('pts:') &&
-        !t.startsWith('gp_photos:')
+      (tag): tag is string =>
+        typeof tag === 'string' &&
+        !tag.startsWith('★') &&
+        !tag.startsWith('🏆') &&
+        !tag.startsWith('(') &&
+        !tag.startsWith('pts:') &&
+        !tag.startsWith('gp_photos:')
     )
     .slice(0, 3);
+
+  const subT = t.detail.categorySubtitles;
 
   switch (place.categorySlug) {
     case 'comida': {
@@ -75,72 +64,68 @@ function getCategorySubtitleLines(
         .slice(0, 3);
       const specs = validSpecs.length > 0 ? validSpecs : cleanTags;
       return {
-        line1: `Restaurante recomendado en ${place.cityName}`,
-        line2:
-          specs.length > 0
-            ? specs.join(' · ')
-            : 'Sabor verificado · Buena relación calidad-precio · Menú local',
+        line1: subT.comida.line1(place.cityName),
+        line2: specs.length > 0 ? specs.join(' · ') : subT.comida.defaultLine2,
         highlightIcon: '🍽️',
-        highlightTitle: 'Especialidades y propuesta gastronómica',
+        highlightTitle: subT.comida.highlightTitle,
       };
     }
     case 'turismo': {
       const act = detail?.activities?.[0];
       const duration = act?.estimatedDurationMins
-        ? `${act.estimatedDurationMins} min de recorrido`
-        : 'Recorrido panorámico';
+        ? subT.turismo.duration(act.estimatedDurationMins)
+        : subT.turismo.defaultDuration;
       const timeLabel = act?.bestTimeOfDay
-        ? `Ideal en: ${TIME_OF_DAY[act.bestTimeOfDay] ?? act.bestTimeOfDay}`
-        : 'Aire libre y fotografía';
+        ? `${subT.turismo.bestTimePrefix}: ${t.detail.timeOfDay[act.bestTimeOfDay] ?? act.bestTimeOfDay}`
+        : subT.turismo.defaultTime;
+      const subName =
+        (place.subcategorySlug && t.subcategories[place.subcategorySlug]) ??
+        place.subcategoryName;
       return {
-        line1: `${place.subcategoryName ?? 'Destino turístico'} en ${place.cityName}`,
-        line2: `${duration} · ${timeLabel} · ${cleanTags[0] ?? 'Acceso verificado'}`,
+        line1: subT.turismo.line1(subName, place.cityName),
+        line2: `${duration} · ${timeLabel} · ${cleanTags[0] ?? subT.turismo.defaultAccess}`,
         highlightIcon: '🌄',
-        highlightTitle: 'Experiencia turística y recorrido sugerido',
+        highlightTitle: subT.turismo.highlightTitle,
       };
     }
     case 'entretenimiento':
       return {
-        line1: `Entretenimiento y vida cultural en ${place.cityName}`,
+        line1: subT.entretenimiento.line1(place.cityName),
         line2:
           cleanTags.length > 0
             ? cleanTags.join(' · ')
-            : 'Ambiente seguro · Ideal con amigos o pareja',
+            : subT.entretenimiento.defaultLine2,
         highlightIcon: '🎭',
-        highlightTitle: 'Ambiente, cartelera y experiencia nocturna',
+        highlightTitle: subT.entretenimiento.highlightTitle,
       };
     case 'actividades': {
       const act = detail?.activities?.[0];
       const duration = act?.estimatedDurationMins
-        ? `Duración: ${act.estimatedDurationMins} min`
-        : 'Actividad al aire libre';
+        ? subT.actividades.duration(act.estimatedDurationMins)
+        : subT.actividades.defaultDuration;
       return {
-        line1: `Actividad recreativa y deportiva en ${place.cityName}`,
-        line2: `${duration} · Ruta segura · ${cleanTags.join(' · ') || 'Contacto con naturaleza'}`,
+        line1: subT.actividades.line1(place.cityName),
+        line2: `${duration} · ${subT.actividades.safeRoute} · ${cleanTags.join(' · ') || subT.actividades.defaultNature}`,
         highlightIcon: '🛶',
-        highlightTitle: 'Detalles de la ruta, duración y nivel físico',
+        highlightTitle: subT.actividades.highlightTitle,
       };
     }
     case 'eventos':
       return {
-        line1: `Agenda cultural y evento en ${place.cityName}`,
+        line1: subT.eventos.line1(place.cityName),
         line2:
-          cleanTags.length > 0
-            ? cleanTags.join(' · ')
-            : 'Música en vivo · Gastronomía · Diseño local',
+          cleanTags.length > 0 ? cleanTags.join(' · ') : subT.eventos.defaultLine2,
         highlightIcon: '🎪',
-        highlightTitle: 'Qué encontrarás en este evento',
+        highlightTitle: subT.eventos.highlightTitle,
       };
     case 'compras':
     default:
       return {
-        line1: `Compras, diseño y artesanías en ${place.cityName}`,
+        line1: subT.compras.line1(place.cityName),
         line2:
-          cleanTags.length > 0
-            ? cleanTags.join(' · ')
-            : 'Productos auténticos · Parqueo y zona segura',
+          cleanTags.length > 0 ? cleanTags.join(' · ') : subT.compras.defaultLine2,
         highlightIcon: '🛍️',
-        highlightTitle: 'Productos destacados y experiencia de compra',
+        highlightTitle: subT.compras.highlightTitle,
       };
   }
 }
@@ -162,6 +147,7 @@ export function PlaceDetail({
   onCalculateRoute: _onCalculateRoute,
   userOrigin,
 }: PlaceDetailProps): React.JSX.Element {
+  const { locale, t } = useLanguage();
   const [detail, setDetail] = useState<PlaceDetailDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -197,14 +183,14 @@ export function PlaceDetail({
       })
       .catch((e: unknown) => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'No se pudo cargar la ficha.');
+          setError(e instanceof Error ? e.message : t.detail.loadError);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [client, slug]);
+  }, [client, slug, t.detail.loadError]);
 
   const activePlace: PlaceCardDTO | null = detail ?? initialCard ?? null;
   if (!activePlace && error) {
@@ -214,8 +200,8 @@ export function PlaceDetail({
     return (
       <div style={{ padding: '3.5rem 1.5rem', display: 'flex', justifyContent: 'center' }}>
         <BackpackerLoader
-          message="Cargando detalles del lugar…"
-          submessage="Preparando fotos, opiniones y mejores rutas"
+          message={t.detail.loadingTitle}
+          submessage={t.detail.loadingSubtitle}
         />
       </div>
     );
@@ -225,11 +211,18 @@ export function PlaceDetail({
   const currentPhotoInfo = photoDetails[photoIndex] ?? photoDetails[0]!;
   const currentPhoto = currentPhotoInfo.url;
   const photos = photoDetails.map((p) => p.url);
-  const score = computeMultiSourceScore(activePlace);
-  const parsedReason = parseRecommendationReason(activePlace.recommendationReason);
+  const score = computeMultiSourceScore(activePlace, locale);
+  const parsedReason = parseRecommendationReason(activePlace.recommendationReason, locale, {
+    categorySlug: activePlace.categorySlug,
+    cityName: activePlace.cityName,
+    mapsStars: score.mapsStars,
+  });
+  const localizedDescription = getLocalizedPlaceDescription(activePlace, score, locale);
   const distanceLabel = formatDistanceKm(activePlace.distanceMeters);
-  const catInfo = getCategorySubtitleLines(activePlace, detail);
+  const catInfo = getCategorySubtitleLines(activePlace, detail, t);
   const cleanTitle = activePlace.name.replace(/^\d+\.\s*/, '');
+  const localizedCategoryName =
+    t.categories[activePlace.categorySlug] ?? activePlace.categoryName;
 
   // URL de navegación directa precisa con origen y destino exactos para el botón principal «Ir ahora»
   const googleMapsUrl = buildGoogleMapsUrl(
@@ -272,7 +265,7 @@ export function PlaceDetail({
       setError(
         err instanceof Error
           ? err.message
-          : 'Inicia sesión para registrar tu opinión.'
+          : t.detail.loginToReview
       );
     }
   };
@@ -312,7 +305,7 @@ export function PlaceDetail({
       setShowReviewModal(false);
       setPlaceReviews((prev) => [createdReview, ...prev]);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al enviar opinión.');
+      setError(err instanceof Error ? err.message : t.detail.reviewSubmitError);
     } finally {
       setSubmittingReview(false);
     }
@@ -372,7 +365,7 @@ export function PlaceDetail({
                 type="button"
                 className="airbnb-circle-icon-btn"
                 onClick={onClose}
-                aria-label="Volver a recomendaciones"
+                aria-label={t.detail.backAria}
               >
                 ←
               </button>
@@ -385,8 +378,8 @@ export function PlaceDetail({
                 type="button"
                 className="airbnb-circle-icon-btn"
                 onClick={handleShare}
-                aria-label="Compartir lugar"
-                title="Compartir"
+                aria-label={t.detail.shareAria}
+                title={t.detail.shareAria}
               >
                 {shareCopied ? '✓' : '⤴'}
               </button>
@@ -395,7 +388,7 @@ export function PlaceDetail({
                   type="button"
                   className="airbnb-circle-icon-btn"
                   onClick={onToggleFavorite}
-                  aria-label="Guardar en favoritos"
+                  aria-label={t.card.saveFavoriteAria}
                   style={{ color: isFavorite ? '#ef4444' : '#222222' }}
                 >
                   {isFavorite ? '♥' : '♡'}
@@ -409,7 +402,7 @@ export function PlaceDetail({
             <>
               <button
                 type="button"
-                aria-label="Foto anterior"
+                aria-label={t.detail.photoPrevAria}
                 onClick={() =>
                   setPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length)
                 }
@@ -432,7 +425,7 @@ export function PlaceDetail({
               </button>
               <button
                 type="button"
-                aria-label="Foto siguiente"
+                aria-label={t.detail.photoNextAria}
                 onClick={() => setPhotoIndex((prev) => (prev + 1) % photos.length)}
                 style={{
                   position: 'absolute',
@@ -478,11 +471,11 @@ export function PlaceDetail({
           >
             {currentPhotoInfo.isVerifiedReal ? (
               <span>
-                📷 Google Maps · {currentPhotoInfo.authorName}
+                {t.detail.verifiedPhoto(currentPhotoInfo.authorName)}
               </span>
             ) : (
               <span>
-                📷 Foto ilustrativa · Sube una real
+                {t.detail.illustrativePhoto}
               </span>
             )}
           </div>
@@ -597,7 +590,7 @@ export function PlaceDetail({
                   border: '1px solid #bbf7d0',
                 }}
               >
-                Puntaje {score.totalScore}/100
+                {t.detail.scoreBadge(score.totalScore)}
               </span>
             </div>
           </div>
@@ -626,7 +619,7 @@ export function PlaceDetail({
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: '.96rem', color: '#222222' }}>
-                Recomendación Verificada · {activePlace.categoryName}
+                {t.detail.verifiedRecommendation(localizedCategoryName)}
               </div>
               <div style={{ color: '#717171', fontSize: '.84rem' }}>
                 {score.sourcesSummary}
@@ -661,15 +654,15 @@ export function PlaceDetail({
               <div>
                 <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
                   {activePlace.addressText ?? activePlace.cityName}
-                  {distanceLabel ? ` · A ${distanceLabel} de ti` : ''}
+                  {distanceLabel ? ` · ${t.detail.distanceFromYou(distanceLabel)}` : ''}
                 </div>
                 <div style={{ color: '#717171', fontSize: '.86rem', marginTop: 2 }}>
-                  Ubicación verificada. Toca «Ir ahora» para abrir la ruta directa.
+                  {t.detail.verifiedLocationHint}
                 </div>
               </div>
             </div>
 
-            {/* Fila 2: Lo elegiría para + Detalles específicos de la categoría */}
+            {/* Fila 2: Razón adaptada + Detalles específicos de la categoría */}
             <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
               <div
                 style={{
@@ -694,7 +687,7 @@ export function PlaceDetail({
                   {parsedReason.choiceReason}
                 </div>
                 <div style={{ color: '#717171', fontSize: '.86rem', marginTop: 3 }}>
-                  {activePlace.description}
+                  {localizedDescription}
                 </div>
                 {detail?.establishment &&
                   Array.isArray(detail.establishment.specialties) &&
@@ -773,7 +766,7 @@ export function PlaceDetail({
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: '.95rem', color: '#222222' }}>
-                  Puntaje Exploro: {score.totalScore} / 100
+                  {t.detail.exploroScoreTitle(score.totalScore)}
                 </div>
 
                 <div
@@ -833,7 +826,7 @@ export function PlaceDetail({
                         marginBottom: 3,
                       }}
                     >
-                      <span>Reddit r/Honduras & comunidad</span>
+                      <span>{t.detail.redditCommunityLabel}</span>
                       <span style={{ color: '#ea580c' }}>{score.redditPoints} / 30</span>
                     </div>
                     <div
@@ -867,7 +860,7 @@ export function PlaceDetail({
                         marginBottom: 3,
                       }}
                     >
-                      <span>Redes Sociales & Guías Locales</span>
+                      <span>{t.detail.socialGuidesLabel}</span>
                       <span style={{ color: '#16a34a' }}>{score.socialPoints} / 25</span>
                     </div>
                     <div
@@ -904,7 +897,7 @@ export function PlaceDetail({
                       fontWeight: 700,
                     }}
                   >
-                    Observación: {parsedReason.caveat}
+                    {t.detail.caveatPrefix}: {parsedReason.caveat}
                   </div>
                 )}
               </div>
@@ -917,7 +910,7 @@ export function PlaceDetail({
               <hr style={{ border: 'none', borderTop: '1px solid #ebebeb' }} />
               <div>
                 <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '.65rem', color: '#222222' }}>
-                  Lo que dice la gente ({detail.evidences.length + placeReviews.length})
+                  {t.detail.whatPeopleSay(detail.evidences.length + placeReviews.length)}
                 </h3>
                 <div style={{ display: 'grid', gap: '.6rem' }}>
                   {detail.evidences.map((ev) => (
@@ -935,7 +928,7 @@ export function PlaceDetail({
                         “{ev.extractedSnippet}”
                       </div>
                       <div style={{ fontSize: '.76rem', color: '#717171', marginTop: '.3rem', fontWeight: 700 }}>
-                        {SOURCE_LABELS[ev.sourceType] ?? ev.sourceName}
+                        {t.detail.sourceLabels[ev.sourceType] ?? ev.sourceName}
                       </div>
                     </div>
                   ))}
@@ -951,7 +944,7 @@ export function PlaceDetail({
                       }}
                     >
                       <div style={{ fontWeight: 700, color: '#15803d' }}>
-                        {rev.userName ?? 'Viajero Exploro'} · ✓ Experiencia propia
+                        {rev.userName ?? t.detail.exploroTraveler} · {t.detail.ownExperience}
                       </div>
                       {rev.comment && (
                         <div style={{ color: '#222222', marginTop: 2 }}>“{rev.comment}”</div>
@@ -969,7 +962,7 @@ export function PlaceDetail({
                       onClick={() => void handleStartActivity()}
                       style={{ fontSize: '.8rem' }}
                     >
-                      ✍️ ¿Ya fuiste? Calificar este lugar
+                      {t.detail.rateThisPlaceBtn}
                     </button>
                   ) : (
                     <form
@@ -984,31 +977,31 @@ export function PlaceDetail({
                         gap: '.55rem',
                       }}
                     >
-                      <strong style={{ fontSize: '.88rem' }}>Comparte tu opinión rápida</strong>
+                      <strong style={{ fontSize: '.88rem' }}>{t.detail.shareQuickReviewTitle}</strong>
                       <input
                         className="field"
                         type="text"
-                        placeholder="¿Qué plato o experiencia recomiendas?"
+                        placeholder={t.detail.recommendedItemPlaceholder}
                         value={recommendedItem}
                         onChange={(e) => setRecommendedItem(e.target.value)}
                       />
                       <textarea
                         className="field"
                         rows={2}
-                        placeholder="Tu comentario para otros usuarios..."
+                        placeholder={t.detail.commentPlaceholder}
                         value={comment}
                         onChange={(e) => setComment(e.target.value)}
                       />
                       <div style={{ display: 'flex', gap: '.5rem' }}>
                         <button type="submit" className="btn btn-primary" disabled={submittingReview}>
-                          {submittingReview ? 'Enviando…' : 'Publicar'}
+                          {submittingReview ? t.detail.publishing : t.detail.publish}
                         </button>
                         <button
                           type="button"
                           className="btn"
                           onClick={() => setShowReviewModal(false)}
                         >
-                          Cancelar
+                          {t.detail.cancel}
                         </button>
                       </div>
                     </form>
@@ -1051,12 +1044,13 @@ export function PlaceDetail({
               activePlace.avgPriceMin,
               activePlace.avgPriceMax,
               activePlace.currencyCode,
-              activePlace.priceTier
+              activePlace.priceTier,
+              locale
             )}
           </div>
           <div style={{ fontSize: '.78rem', color: '#717171', marginTop: 1 }}>
-            {activePlace.categorySlug === 'comida' ? 'Promedio por persona' : 'Costo estimado'}
-            {distanceLabel ? ` · a ${distanceLabel}` : ''}
+            {activePlace.categorySlug === 'comida' ? t.detail.avgPerPerson : t.detail.estimatedCost}
+            {distanceLabel ? ` · ${t.card.distanceAway(distanceLabel)}` : ''}
           </div>
           <div
             style={{
@@ -1072,7 +1066,7 @@ export function PlaceDetail({
               color: '#222222',
             }}
           >
-            ✓ Ruta directa disponible
+            {t.detail.directRouteAvailable}
           </div>
         </div>
 
@@ -1083,10 +1077,10 @@ export function PlaceDetail({
             rel="noopener noreferrer"
             className="airbnb-ir-ahora-btn"
           >
-            Ir ahora
+            {t.detail.goNowBtn}
           </a>
           <div style={{ marginTop: 4, fontSize: '.72rem', color: '#717171' }}>
-            o abrir en{' '}
+            {t.detail.orOpenIn}{' '}
             <a
               href={wazeUrl}
               target="_blank"
@@ -1107,7 +1101,7 @@ export function PlaceDetail({
         className="airbnb-detail-backdrop"
         role="dialog"
         aria-modal="true"
-        aria-label={`Detalles de ${cleanTitle}`}
+        aria-label={cleanTitle}
         onClick={onClose}
       >
         {content}
