@@ -48,7 +48,7 @@ export default {
       },
       apiUrl:
         process.env.EXPO_PUBLIC_API_URL ??
-        'http://192.168.61.21:4000/api/v1',
+        'http://10.60.4.42:4000/api/v1',
       mapStyleUrl:
         process.env.EXPO_PUBLIC_MAP_STYLE_URL ??
         'https://tiles.openfreemap.org/styles/liberty',
