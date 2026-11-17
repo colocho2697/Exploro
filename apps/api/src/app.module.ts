@@ -15,6 +15,7 @@ import { AuthService } from './modules/auth/auth.service';
 import { AuthController } from './modules/auth/auth.controller';
 import { CatalogService } from './modules/catalog/catalog.service';
 import { GooglePlacesLiveService } from './modules/catalog/google-places-live.service';
+import { FoursquarePlacesLiveService } from './modules/catalog/foursquare-places-live.service';
 import { CatalogController } from './modules/catalog/catalog.controller';
 import { LibraryService } from './modules/library/library.service';
 import { LibraryController } from './modules/library/library.controller';
@@ -94,6 +95,7 @@ export class GlobalApiExceptionFilter implements ExceptionFilter {
     AuthService,
     CatalogService,
     GooglePlacesLiveService,
+    FoursquarePlacesLiveService,
     LibraryService,
     GeoService,
     SourcesService,

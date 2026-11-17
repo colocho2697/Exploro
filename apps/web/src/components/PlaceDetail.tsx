@@ -48,7 +48,8 @@ function getCategorySubtitleLines(
         !tag.startsWith('🏆') &&
         !tag.startsWith('(') &&
         !tag.startsWith('pts:') &&
-        !tag.startsWith('gp_photos:')
+        !tag.startsWith('gp_photos:') &&
+        !tag.startsWith('fsq_photos:')
     )
     .slice(0, 3);
 

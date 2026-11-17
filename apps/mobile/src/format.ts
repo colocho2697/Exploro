@@ -419,7 +419,8 @@ export function computeMultiSourceScore(
 
   const totalScore = Math.min(99, mapsPoints + redditPoints + socialPoints);
 
-  const activeSources: string[] = ['Google Maps'];
+  const hasFoursquare = joined.toLowerCase().includes('foursquare');
+  const activeSources: string[] = [hasFoursquare ? 'Foursquare Places' : 'Google Maps'];
   if (hasReddit) activeSources.push('Reddit');
   else activeSources.push(dict.semantic.communitySource);
   if (hasLocalGuide) activeSources.push(dict.semantic.guidesAndSocialSource);
@@ -617,19 +618,16 @@ export const GOOGLE_PLACES_API_KEY =
 export function getPlacePhotoDetails(
   place: Pick<PlaceCardDTO, 'slug' | 'categorySlug' | 'imageUrl'> & { tags?: string[] }
 ): PlacePhotoInfo[] {
-  const gpTag = place.tags?.find((t) => typeof t === 'string' && t.startsWith('gp_photos:'));
-  if (gpTag) {
+  // 1. Fotos oficiales de Foursquare Places registradas en tags
+  const fsqTag = place.tags?.find((t) => typeof t === 'string' && t.startsWith('fsq_photos:'));
+  if (fsqTag) {
     try {
-      const list = JSON.parse(gpTag.slice('gp_photos:'.length)) as Array<{
-        photoName: string;
-        authorName: string;
-        authorUri: string | null;
-      }>;
+      const list = JSON.parse(fsqTag.slice('fsq_photos:'.length)) as string[];
       if (Array.isArray(list) && list.length > 0) {
-        return list.map((gp) => ({
-          url: `https://places.googleapis.com/v1/${gp.photoName}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_PLACES_API_KEY}`,
-          authorName: gp.authorName || 'Google Maps',
-          authorUri: gp.authorUri || null,
+        return list.map((url) => ({
+          url,
+          authorName: 'Foursquare Places',
+          authorUri: 'https://foursquare.com',
           isVerifiedReal: true,
         }));
       }
@@ -638,25 +636,73 @@ export function getPlacePhotoDetails(
     }
   }
 
-  const gPhotos = GOOGLE_PLACES_PHOTOS[place.slug];
-  if (gPhotos && gPhotos.length > 0) {
-    return gPhotos.map((gp) => ({
-      url: `https://places.googleapis.com/v1/${gp.photoName}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_PLACES_API_KEY}`,
-      authorName: gp.authorName,
-      authorUri: gp.authorUri,
-      isVerifiedReal: true,
-    }));
-  }
-
-  if (place.imageUrl && place.imageUrl.includes('places.googleapis.com')) {
+  // 2. URL directa de CDN Foursquare Fastly en imageUrl
+  if (
+    place.imageUrl &&
+    (place.imageUrl.includes('4sqi.net') || place.imageUrl.includes('fastly.4sqi.net'))
+  ) {
     return [
       {
         url: place.imageUrl,
-        authorName: 'Google Maps',
-        authorUri: null,
+        authorName: 'Foursquare Places',
+        authorUri: 'https://foursquare.com',
         isVerifiedReal: true,
       },
     ];
+  }
+
+  const placesProvider =
+    typeof process !== 'undefined'
+      ? process.env.EXPO_PUBLIC_PLACES_PROVIDER
+      : undefined;
+  const isGoogleAllowed =
+    placesProvider !== 'foursquare' && placesProvider !== 'none';
+
+  if (isGoogleAllowed) {
+    // 3. Fotos oficiales de Google Places registradas dinámicamente en tags
+    const gpTag = place.tags?.find((t) => typeof t === 'string' && t.startsWith('gp_photos:'));
+    if (gpTag) {
+      try {
+        const list = JSON.parse(gpTag.slice('gp_photos:'.length)) as Array<{
+          photoName: string;
+          authorName: string;
+          authorUri: string | null;
+        }>;
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((gp) => ({
+            url: `https://places.googleapis.com/v1/${gp.photoName}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_PLACES_API_KEY}`,
+            authorName: gp.authorName || 'Google Maps',
+            authorUri: gp.authorUri || null,
+            isVerifiedReal: true,
+          }));
+        }
+      } catch {
+        // Continuar
+      }
+    }
+
+    // 4. Fotos mapeadas en catálogo pre-indexado
+    const gPhotos = GOOGLE_PLACES_PHOTOS[place.slug];
+    if (gPhotos && gPhotos.length > 0) {
+      return gPhotos.map((gp) => ({
+        url: `https://places.googleapis.com/v1/${gp.photoName}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_PLACES_API_KEY}`,
+        authorName: gp.authorName,
+        authorUri: gp.authorUri,
+        isVerifiedReal: true,
+      }));
+    }
+
+    // 5. Si tiene una URL directa de Google Places API en imageUrl
+    if (place.imageUrl && place.imageUrl.includes('places.googleapis.com')) {
+      return [
+        {
+          url: place.imageUrl,
+          authorName: 'Google Maps',
+          authorUri: null,
+          isVerifiedReal: true,
+        },
+      ];
+    }
   }
 
   const custom = SLUG_GALLERIES[place.slug];

@@ -97,6 +97,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-exploro_prod_jwt_super_secret_key_32_chars}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://10.60.4.42:3000,http://localhost:3000}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U}
+      PLACES_PROVIDER: ${PLACES_PROVIDER:-foursquare}
+      FOURSQUARE_API_KEY: ${FOURSQUARE_API_KEY:-5MRFYO1STFOMOG4IRIWQK11DVXH1NPVSM532QMKYZMRPEIBL}
+      FOURSQUARE_API_VERSION: ${FOURSQUARE_API_VERSION:-2025-06-17}
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,6 +116,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://10.60.4.42:4000/api/v1}
         NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U}
+        NEXT_PUBLIC_PLACES_PROVIDER: ${NEXT_PUBLIC_PLACES_PROVIDER:-foursquare}
     container_name: exploro-prod-web
     restart: always
     ports:
@@ -121,6 +125,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://10.60.4.42:4000/api/v1}
+      NEXT_PUBLIC_PLACES_PROVIDER: ${NEXT_PUBLIC_PLACES_PROVIDER:-foursquare}
     depends_on:
       - api
 

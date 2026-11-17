@@ -1,5 +1,6 @@
 import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { GooglePlacesLiveService } from './google-places-live.service';
+import { FoursquarePlacesLiveService } from './foursquare-places-live.service';
 import {
   resolveSafeRecommendationReason,
   tiersAboveBudget,
@@ -106,7 +107,10 @@ export class CatalogService {
     @Inject(RedisService) private readonly redis: RedisService,
     @Optional()
     @Inject(GooglePlacesLiveService)
-    private readonly googlePlacesLive?: GooglePlacesLiveService
+    private readonly googlePlacesLive?: GooglePlacesLiveService,
+    @Optional()
+    @Inject(FoursquarePlacesLiveService)
+    private readonly foursquarePlacesLive?: FoursquarePlacesLiveService
   ) {}
 
   public async getCategories(): Promise<CategoryDTO[]> {
@@ -321,8 +325,8 @@ export class CatalogService {
     );
 
     let finalRows = res.rows;
-    if (hasCoords && finalRows.length < 8 && this.googlePlacesLive) {
-      const newlyIndexed = await this.googlePlacesLive.ensureAreaPopulated(
+    if (hasCoords && finalRows.length < 8) {
+      const newlyIndexed = await this.populateAreaIfNeeded(
         query,
         finalRows.length
       );
@@ -345,6 +349,37 @@ export class CatalogService {
       personalizationApplied,
       sortApplied,
     };
+  }
+
+  private async populateAreaIfNeeded(
+    query: DiscoverPlacesQueryInput,
+    currentCount: number
+  ): Promise<number> {
+    const provider = (process.env.PLACES_PROVIDER || 'foursquare').toLowerCase();
+
+    if (provider === 'foursquare' && this.foursquarePlacesLive) {
+      return this.foursquarePlacesLive.ensureAreaPopulated(query, currentCount);
+    }
+    if (provider === 'google' && this.googlePlacesLive) {
+      return this.googlePlacesLive.ensureAreaPopulated(query, currentCount);
+    }
+    if (provider === 'hybrid') {
+      let indexed = 0;
+      if (this.foursquarePlacesLive) {
+        indexed = await this.foursquarePlacesLive.ensureAreaPopulated(
+          query,
+          currentCount
+        );
+      }
+      if (indexed === 0 && this.googlePlacesLive) {
+        indexed = await this.googlePlacesLive.ensureAreaPopulated(
+          query,
+          currentCount
+        );
+      }
+      return indexed;
+    }
+    return 0;
   }
 
   /** Tarjetas por id, conservando el orden solicitado (favoritos y colecciones). */

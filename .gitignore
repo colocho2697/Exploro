@@ -13,6 +13,8 @@ out/
 web-build/
 coverage/
 *.tsbuildinfo
+apps/mobile/android/
+apps/mobile/ios/
 
 # Environment variables & Secrets (Never commit credentials)
 .env

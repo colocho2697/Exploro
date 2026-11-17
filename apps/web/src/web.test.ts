@@ -162,5 +162,44 @@ describe('@exploro/web — Formato para EE. UU. (Fase 2)', () => {
       );
     }
   });
+
+  it('procesa galerías oficiales de Foursquare Places con CDN Fastly sin llamadas a Google Maps ($0.00)', () => {
+    const fsqPhotos = [
+      'https://fastly.4sqi.net/img/general/800x600/123_abc.jpg',
+      'https://fastly.4sqi.net/img/general/800x600/456_def.jpg',
+    ];
+
+    const photoDetails = getPlacePhotoDetails({
+      slug: 'lugar-con-fotos-fsq',
+      categorySlug: 'comida',
+      imageUrl: fsqPhotos[0]!,
+      tags: [`fsq_photos:${JSON.stringify(fsqPhotos)}`],
+    });
+
+    expect(photoDetails.length).toBe(2);
+    expect(photoDetails[0]?.isVerifiedReal).toBe(true);
+    expect(photoDetails[0]?.authorName).toBe('Foursquare Places');
+    expect(photoDetails[0]?.url).toBe(fsqPhotos[0]);
+    expect(photoDetails[0]?.url).not.toContain('places.googleapis.com');
+  });
+
+  it('omite las fotos de Google Places cuando NEXT_PUBLIC_PLACES_PROVIDER es foursquare para evitar cobros', () => {
+    const prevEnv = process.env.NEXT_PUBLIC_PLACES_PROVIDER;
+    process.env.NEXT_PUBLIC_PLACES_PROVIDER = 'foursquare';
+
+    try {
+      const photoDetails = getPlacePhotoDetails({
+        slug: 'el-morito-la-hacienda-tegucigalpa',
+        categorySlug: 'comida',
+        imageUrl: null,
+      });
+
+      // Debe caer a fotos referenciales seguras sin consultar la API de Google Maps
+      expect(photoDetails[0]?.url).not.toContain('places.googleapis.com');
+      expect(photoDetails[0]?.url).toContain('images.unsplash.com');
+    } finally {
+      process.env.NEXT_PUBLIC_PLACES_PROVIDER = prevEnv;
+    }
+  });
 });
 

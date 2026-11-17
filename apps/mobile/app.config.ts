@@ -53,6 +53,8 @@ export default {
         process.env.EXPO_PUBLIC_MAP_STYLE_URL ??
         'https://tiles.openfreemap.org/styles/liberty',
       costPolicy: 'ZERO_COST',
+      placesProvider:
+        process.env.EXPO_PUBLIC_PLACES_PROVIDER ?? 'foursquare',
     },
   },
 };
