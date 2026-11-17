@@ -46,6 +46,7 @@ services:
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?Requerido en producción}
     volumes:
       - exploro_prod_minio_data:/data
+    command: ["server", "/data", "--console-address", ":9001"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 15s
