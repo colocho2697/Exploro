@@ -63,10 +63,11 @@ services:
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Requerido}
       LOCAL_OLLAMA_URL: ${LOCAL_OLLAMA_URL:-http://host.docker.internal:11434}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")'"]
       interval: 10s
-      timeout: 3s
-      retries: 3
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     deploy:
       resources:
         limits:
