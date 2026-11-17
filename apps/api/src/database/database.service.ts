@@ -15,6 +15,9 @@ export class DatabaseService implements OnModuleDestroy {
       max: 15,
       idleTimeoutMillis: 30000,
     });
+    this.pool.on('error', () => {
+      // Evita que un corte de conexión inactiva cierre el proceso de Node.js
+    });
   }
 
   public async query<T extends QueryResultRow = QueryResultRow>(

@@ -62,7 +62,12 @@ export function PlaceCard({
     mapsStars: score.mapsStars,
   });
   const heroPhoto = getPlacePhotoGallery(place)[0]!;
+  const [photoSrc, setPhotoSrc] = useState(heroPhoto);
   const cleanTitle = place.name.replace(/^\d+\.\s*/, '');
+
+  React.useEffect(() => {
+    setPhotoSrc(heroPhoto);
+  }, [heroPhoto]);
 
   return (
     <>
@@ -88,9 +93,16 @@ export function PlaceCard({
           }}
         >
           <img
-            src={heroPhoto}
+            src={photoSrc}
             alt={cleanTitle}
             loading="lazy"
+            onError={() => {
+              const fallback =
+                'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80';
+              if (photoSrc !== fallback) {
+                setPhotoSrc(fallback);
+              }
+            }}
             style={{
               width: '100%',
               height: '100%',

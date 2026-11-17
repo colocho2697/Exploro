@@ -210,7 +210,12 @@ export function PlaceDetail({
   const photoDetails = getPlacePhotoDetails(activePlace);
   const currentPhotoInfo = photoDetails[photoIndex] ?? photoDetails[0]!;
   const currentPhoto = currentPhotoInfo.url;
+  const [photoSrc, setPhotoSrc] = useState(currentPhoto);
   const photos = photoDetails.map((p) => p.url);
+
+  useEffect(() => {
+    setPhotoSrc(currentPhoto);
+  }, [currentPhoto]);
   const score = computeMultiSourceScore(activePlace, locale);
   const parsedReason = parseRecommendationReason(activePlace.recommendationReason, locale, {
     categorySlug: activePlace.categorySlug,
@@ -326,8 +331,15 @@ export function PlaceDetail({
           }}
         >
           <img
-            src={currentPhoto}
+            src={photoSrc}
             alt={cleanTitle}
+            onError={() => {
+              const fallback =
+                'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80';
+              if (photoSrc !== fallback) {
+                setPhotoSrc(fallback);
+              }
+            }}
             style={{
               width: '100%',
               height: '100%',

@@ -10,9 +10,12 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix(prefix);
 
   app.enableCors({
-    origin: process.env.CORS_ORIGINS
-      ? process.env.CORS_ORIGINS.split(',')
-      : true,
+    origin: (origin, callback) => {
+      // Permitir peticiones sin encabezado Origin (apps móviles nativas como iOS y Android)
+      // y peticiones desde la red local o web
+      if (!origin) return callback(null, true);
+      return callback(null, true);
+    },
     credentials: true,
   });
 

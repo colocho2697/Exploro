@@ -7,14 +7,22 @@ export default {
   expo: {
     name: 'Exploro',
     slug: 'exploro',
+    owner: 'edwin297',
     version: '0.1.0',
     orientation: 'portrait',
+    icon: './assets/icon.png',
     scheme: 'exploro',
-    userInterfaceStyle: 'dark',
+    userInterfaceStyle: 'light',
     newArchEnabled: true,
+    splash: {
+      image: './assets/splash.png',
+      resizeMode: 'contain',
+      backgroundColor: '#0b1120',
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.exploro.app',
+      icon: './assets/icon.png',
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           'Exploro utiliza tu ubicación únicamente cuando buscas lugares y experiencias cercanas a ti.',
@@ -24,6 +32,10 @@ export default {
     },
     android: {
       package: 'com.exploro.app',
+      adaptiveIcon: {
+        foregroundImage: './assets/adaptive-icon.png',
+        backgroundColor: '#0b1120',
+      },
       permissions: [
         'ACCESS_COARSE_LOCATION',
         'ACCESS_FINE_LOCATION',
@@ -31,7 +43,12 @@ export default {
       ],
     },
     extra: {
-      apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1',
+      eas: {
+        projectId: 'ea157787-288e-44db-96bc-7889beadbd63',
+      },
+      apiUrl:
+        process.env.EXPO_PUBLIC_API_URL ??
+        'http://192.168.61.21:4000/api/v1',
       mapStyleUrl:
         process.env.EXPO_PUBLIC_MAP_STYLE_URL ??
         'https://tiles.openfreemap.org/styles/liberty',

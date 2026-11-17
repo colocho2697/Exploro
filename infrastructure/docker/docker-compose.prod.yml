@@ -81,10 +81,12 @@ services:
     container_name: exploro-prod-api
     restart: always
     ports:
-      - "4000:4000"
+      - "${API_PORT:-4000}:4000"
     environment:
       NODE_ENV: production
       PORT: 4000
+      API_PORT: 4000
+      API_PREFIX: ${API_PREFIX:-api/v1}
       DATABASE_URL: postgres://${POSTGRES_USER:-exploro_prod}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-exploro_prod_db}
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
@@ -92,7 +94,9 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       AI_ENGINE_URL: http://ai-engine:8000
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
-      JWT_SECRET: ${JWT_SECRET:?Requerido}
+      JWT_SECRET: ${JWT_SECRET:-exploro_prod_jwt_super_secret_key_32_chars}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://10.60.4.42:3000,http://localhost:3000}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U}
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,14 +109,18 @@ services:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://10.60.4.42:4000/api/v1}
+        NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U}
     container_name: exploro-prod-web
     restart: always
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000/api/v1}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://10.60.4.42:4000/api/v1}
     depends_on:
       - api
 

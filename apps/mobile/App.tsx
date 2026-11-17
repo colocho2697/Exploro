@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Linking,
   Modal,
   Pressable,
   SafeAreaView,
@@ -9,2717 +7,1093 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { ExploroApiClient } from '@exploro/api-client';
 import {
-  canAccessMode,
-  formatVerifiedPriceRange,
-  getInitialModeDescriptors,
-} from '@exploro/business-rules';
-import {
-  ActivityAlternativeOptionDTO,
-  ActivityLogDTO,
-  AutocompleteSuggestion,
-  BudgetTier,
   CategoryDTO,
-  CompanionType,
-  ExplorationMode,
+  CollectionDTO,
+  Coordinates,
+  FavoriteItemDTO,
   PlaceCardDTO,
-  PlaceDetailDTO,
-  PlaceRecommendationSummary,
   PlaceSortBy,
   RouteSummary,
-  SurpriseSuggestionDTO,
-  TripDTO,
-  TripItemDTO,
-  TripReorganizationImpactDTO,
-  UserReviewDTO,
+  UserProfile,
 } from '@exploro/shared-types';
+import { AuthPanel } from './src/components/AuthPanel';
+import { BackpackerLoader } from './src/components/BackpackerLoader';
+import { LibraryPanel } from './src/components/LibraryPanel';
+import { MapView } from './src/components/MapView';
+import { PlaceCard } from './src/components/PlaceCard';
+import { DEFAULT_RADIUS_KM } from './src/format';
 import {
-  buildGoogleMapsUrl,
-  buildWazeUrl,
-  DEFAULT_RADIUS_KM,
-  formatDistanceKm,
-  US_CITIES,
-} from './src/format';
+  LanguageProvider,
+  SupportedLocale,
+  useLanguage,
+} from './src/i18n';
 
 const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+  process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.61.21:4000/api/v1';
 
-export default function App(): React.JSX.Element {
-  /**
-   * Paso 1.5 y Parte V Sección 6:
-   * Primera pantalla con «Estoy de viaje» y «Soy local (próximamente)».
-   * Prohibido mostrar recomendaciones antes de que el usuario elija su modalidad.
-   */
-  const [selectedMode, setSelectedMode] = useState<ExplorationMode | null>(null);
-  const [localNotice, setLocalNotice] = useState<string | null>(null);
+/** Coordenadas iniciales de respaldo antes de que responda el GPS del dispositivo */
+const DEFAULT_COORDS: Coordinates = { lat: 14.0885, lng: -87.1815 };
 
-  // Navegación principal y vistas paso a paso (Categoría en Cards -> Mapa 8 mi)
-  const [activeTab, setActiveTab] = useState<'explore' | 'favorites' | 'trips'>('explore');
-  const [categories, setCategories] = useState<CategoryDTO[]>([]);
-  const [selectedCategorySlug, setSelectedCategorySlug] = useState<string>('');
-  const [selectedCitySlug, setSelectedCitySlug] = useState<string>('tegucigalpa');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<PlaceSortBy>('recommended');
-  const [radiusKm, setRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
-  const [unbounded, setUnbounded] = useState<boolean>(false);
-  const [showMapFilters, setShowMapFilters] = useState<boolean>(false);
+const CATEGORY_ICONS: Record<string, string> = {
+  comida: '🍕',
+  turismo: '🧭',
+  entretenimiento: '🎭',
+  actividades: '🛶',
+  eventos: '🎪',
+  compras: '🛍️',
+};
 
-  // Fase 6: Planificador de Viajes (Oculto bajo Feature Flag)
-  const [internalOverride, setInternalOverride] = useState<boolean>(true);
-  const [trips, setTrips] = useState<TripDTO[]>([]);
-  const [selectedTrip, setSelectedTrip] = useState<TripDTO | null>(null);
-  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(1);
-  const [tripsLoading, setTripsLoading] = useState<boolean>(false);
-  const [tripsError, setTripsError] = useState<string | null>(null);
-  const [altsItem, setAltsItem] = useState<TripItemDTO | null>(null);
-  const [altsData, setAltsData] = useState<{
-    verySimilar: ActivityAlternativeOptionDTO[];
-    relatedExperiences: ActivityAlternativeOptionDTO[];
-    requiresAdjustments: ActivityAlternativeOptionDTO[];
-  } | null>(null);
-  const [altsLoading, setAltsLoading] = useState<boolean>(false);
-  const [modifyingItem, setModifyingItem] = useState<TripItemDTO | null>(null);
-  const [newStartTime, setNewStartTime] = useState<string>('11:00');
-  const [newDuration, setNewDuration] = useState<number>(60);
-  const [reorgPreview, setReorgPreview] = useState<TripReorganizationImpactDTO | null>(null);
+const SUBCATEGORY_ICONS: Record<string, string> = {
+  miradores: '🌄',
+  monumentos: '🏛️',
+  naturaleza: '🌲',
+  museos: '🖼️',
+  cultura: '🎨',
+  'pueblos-y-ciudades': '🏘️',
+  'lugares-emblematicos': '📍',
+  restaurantes: '🍽️',
+  cafeterias: '☕',
+  'comida-callejera': '🌮',
+  'bares-y-cocteles': '🍸',
+  postres: '🍰',
+  'teatro-y-shows': '🎭',
+  cines: '🎬',
+  'musica-en-vivo': '🎸',
+  'vida-nocturna': '🌙',
+  senderismo: '🥾',
+  'deportes-acuaticos': '🏄',
+  parques: '🌳',
+  ferias: '🎪',
+  conciertos: '🎟️',
+  'centros-comerciales': '🏬',
+  artesanias: '🏺',
+  mercados: '🧺',
+};
 
-  // Autocomplete
-  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<
-    AutocompleteSuggestion[]
-  >([]);
+interface FilterValues {
+  citySlug: string;
+  searchQuery: string;
+  sortBy: PlaceSortBy;
+  radiusKm: number;
+  unbounded: boolean;
+  coords: Coordinates | null;
+}
 
-  // Datos
-  const [places, setPlaces] = useState<PlaceCardDTO[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState<boolean>(false);
-  const [errorNotice, setErrorNotice] = useState<string | null>(null);
+const INITIAL_FILTERS: FilterValues = {
+  citySlug: '',
+  searchQuery: '',
+  sortBy: 'recommended',
+  radiusKm: DEFAULT_RADIUS_KM,
+  unbounded: false,
+  coords: DEFAULT_COORDS,
+};
 
-  // Detalle de lugar y ruta
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
-  const [placeDetail, setPlaceDetail] = useState<PlaceDetailDTO | null>(null);
-  const [recSummary, setRecSummary] = useState<PlaceRecommendationSummary | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
-  const [routeInfo, setRouteInfo] = useState<RouteSummary | null>(null);
-  const [routeLoading, setRouteLoading] = useState<boolean>(false);
+function ExploroMobileHome(): React.JSX.Element {
+  const { locale, setLocale, localeMeta, t, supportedLocales } = useLanguage();
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // Fase 5: Experiencias Propias y Verificación
-  const [activeActivity, setActiveActivity] = useState<ActivityLogDTO | null>(null);
-  const [placeReviews, setPlaceReviews] = useState<UserReviewDTO[]>([]);
-  const [experienceNotice, setExperienceNotice] = useState<string | null>(null);
-  const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
-  const [feedbackRating, setFeedbackRating] = useState<number>(5);
-  const [feedbackRecommended, setFeedbackRecommended] = useState<string>('');
-  const [feedbackComment, setFeedbackComment] = useState<string>('');
-  const [feedbackSubmitting, setFeedbackSubmitting] = useState<boolean>(false);
-
-  // Modal Sorpréndeme
-  const [surpriseModalVisible, setSurpriseModalVisible] = useState<boolean>(false);
-  const [surpriseBudget, setSurpriseBudget] = useState<BudgetTier>('MEDIUM');
-  const [surpriseMinutes, setSurpriseMinutes] = useState<number>(120);
-  const [surpriseCompanion, setSurpriseCompanion] = useState<CompanionType>('SOLO');
-  const [surpriseSuggestions, setSurpriseSuggestions] = useState<SurpriseSuggestionDTO[]>([]);
-  const [surpriseLoading, setSurpriseLoading] = useState<boolean>(false);
-  const [surpriseError, setSurpriseError] = useState<string | null>(null);
-
-  const modes = useMemo(() => getInitialModeDescriptors(false), []);
-  const client = useMemo(() => new ExploroApiClient({ baseUrl: API_URL }), []);
-
-  const handleModePress = (mode: ExplorationMode): void => {
-    const access = canAccessMode(mode, false);
-    if (!access.allowed) {
-      setLocalNotice(
-        access.reason ?? 'El modo local estará disponible próximamente.'
-      );
-      return;
-    }
-    setLocalNotice(null);
-    setSelectedMode(mode);
-  };
-
-  // Carga inicial de categorías
-  useEffect(() => {
-    if (selectedMode !== 'TRAVELER') return;
-    void (async () => {
-      try {
-        const cats = await client.getCategories();
-        setCategories(cats);
-      } catch {
-        // En caso de caída temporal del backend
-      }
-    })();
-  }, [selectedMode, client]);
-
-  // Autocomplete en búsqueda
-  useEffect(() => {
-    if (selectedMode !== 'TRAVELER' || searchQuery.trim().length < 2) {
-      setAutocompleteSuggestions([]);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      client
-        .geoAutocomplete({
-          q: searchQuery,
-          citySlug: selectedCitySlug || undefined,
-          limit: 4,
-        })
-        .then((res) => setAutocompleteSuggestions(res))
-        .catch(() => setAutocompleteSuggestions([]));
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, selectedCitySlug, selectedMode, client]);
-
-  // Consulta de lugares según filtros y orden (solo tras elegir categoría en el paso 2)
-  useEffect(() => {
-    if (selectedMode !== 'TRAVELER' || !selectedCategorySlug) return;
-    setLoading(true);
-    setErrorNotice(null);
-
-    // Coordenadas actuales por defecto (Col. Florencia Norte, Tegucigalpa) o ciudad elegida en filtros del mapa
-    const cityData = US_CITIES.find((c) => c.slug === selectedCitySlug);
-    const lat = cityData && 'lat' in cityData ? cityData.lat : 14.0885;
-    const lng = cityData && 'lng' in cityData ? cityData.lng : -87.1815;
-
-    void (async () => {
-      try {
-        const discovered = await client.discoverPlaces({
-          categorySlug: selectedCategorySlug || undefined,
-          searchQuery: searchQuery.trim() || undefined,
-          sortBy,
-          lat,
-          lng,
-          radiusKm,
-          unbounded,
-        });
-        setPlaces(discovered.data);
-      } catch {
-        setErrorNotice('No fue posible cargar el catálogo. Verifica tu conexión.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [selectedMode, selectedCategorySlug, selectedCitySlug, searchQuery, sortBy, radiusKm, unbounded, client]);
-
-  // Abrir detalle de un lugar
-  const handleOpenDetail = async (idOrSlug: string): Promise<void> => {
-    setSelectedPlaceId(idOrSlug);
-    setLoadingDetail(true);
-    setRouteInfo(null);
-    setRecSummary(null);
-    setActiveActivity(null);
-    setPlaceReviews([]);
-    setExperienceNotice(null);
-    try {
-      const detail = await client.getPlaceBySlug(idOrSlug);
-      setPlaceDetail(detail);
-      client
-        .getPlaceRecommendationSummary(detail.id)
-        .then((s) => setRecSummary(s))
-        .catch(() => {});
-      client
-        .getPlaceReviews(detail.id)
-        .then((r) => setPlaceReviews(r))
-        .catch(() => {});
-      client
-        .getActiveActivity()
-        .then((act) => {
-          if (act && act.placeId === detail.id) setActiveActivity(act);
-        })
-        .catch(() => {});
-    } catch {
-      setErrorNotice('No fue posible obtener los detalles del lugar.');
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  const handleCloseDetail = (): void => {
-    setSelectedPlaceId(null);
-    setPlaceDetail(null);
-    setRouteInfo(null);
-    setRecSummary(null);
-    setActiveActivity(null);
-    setPlaceReviews([]);
-    setExperienceNotice(null);
-    setShowFeedbackModal(false);
-  };
-
-  // Fase 5: Acciones de Experiencias Propias y Verificación
-  const handleStartActivity = async (): Promise<void> => {
-    if (!placeDetail) return;
-    try {
-      setExperienceNotice(null);
-      const act = await client.startActivity({
-        placeId: placeDetail.id,
-        activityTitle: placeDetail.activities[0]?.title ?? `Visita a ${placeDetail.name}`,
-      });
-      setActiveActivity(act);
-      setExperienceNotice('¡Actividad iniciada! La presencia física no se asume por el simple inicio.');
-    } catch {
-      setExperienceNotice('No fue posible iniciar actividad (inicia sesión para registrarla).');
-    }
-  };
-
-  const handleVerifyProximity = async (): Promise<void> => {
-    if (!activeActivity || !placeDetail) return;
-    try {
-      // Simula verificación GPS cercana (< 50 metros)
-      const res = await client.verifyActivityVisit(activeActivity.id, {
-        latitude: placeDetail.coordinates.lat + 0.0001,
-        longitude: placeDetail.coordinates.lng + 0.0001,
-      });
-      setExperienceNotice(res.message);
-      if (res.isVerified) {
-        setActiveActivity((prev) =>
-          prev ? { ...prev, isVerifiedVisit: true, verificationMethod: 'GPS_PROXIMITY' } : null
-        );
-      }
-    } catch {
-      setExperienceNotice('Error al verificar proximidad con el lugar.');
-    }
-  };
-
-  const handleCompleteExperience = async (): Promise<void> => {
-    if (!activeActivity || !placeDetail) return;
-    setFeedbackSubmitting(true);
-    try {
-      const isFood = placeDetail.categorySlug === 'comida';
-      const rev = await client.completeActivityWithReview(activeActivity.id, {
-        reviewType: isFood ? 'RESTAURANT' : 'TOURISM',
-        restaurantReview: isFood
-          ? {
-              tasteQuality: feedbackRating,
-              recommendedDish: feedbackRecommended || undefined,
-              wouldReturn: true,
-              comment: feedbackComment || undefined,
-            }
-          : undefined,
-        tourismReview: !isFood
-          ? {
-              worthIt: true,
-              recommendedItem: feedbackRecommended || undefined,
-              comment: feedbackComment || undefined,
-            }
-          : undefined,
-        wouldReturnOrRecommend: true,
-        generalComment: feedbackComment || undefined,
-      });
-
-      setActiveActivity(null);
-      setShowFeedbackModal(false);
-      setExperienceNotice('¡Experiencia registrada! Tu opinión fortalece el ranking determinista.');
-      setPlaceReviews((prev) => [rev, ...prev]);
-
-      client
-        .getPlaceRecommendationSummary(placeDetail.id)
-        .then((s) => setRecSummary(s))
-        .catch(() => {});
-    } catch {
-      setExperienceNotice('Error al enviar opinión.');
-    } finally {
-      setFeedbackSubmitting(false);
-    }
-  };
-
-  // Calcular ruta sin costo ($0.00)
-  const handleCalculateRoute = async (mode: 'driving' | 'walking'): Promise<void> => {
-    if (!placeDetail) return;
-    setRouteLoading(true);
-    try {
-      // Usa coordenadas de ciudad seleccionada o Nueva York como referencia
-      const cityData = US_CITIES.find((c) => c.slug === selectedCitySlug);
-      const origin =
-        cityData && 'lat' in cityData
-          ? { lat: cityData.lat, lng: cityData.lng }
-          : { lat: 40.7128, lng: -74.006 };
-
-      const route = await client.geoCalculateRoute({
-        origin,
-        destination: {
-          lat: placeDetail.coordinates.lat,
-          lng: placeDetail.coordinates.lng,
-        },
-        mode,
-      });
-      setRouteInfo(route);
-    } catch {
-      // En caso de error
-    } finally {
-      setRouteLoading(false);
-    }
-  };
-
-  // Toggle de favoritos
-  const toggleFavorite = (id: string): void => {
-    setFavoriteIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  // Ejecución de Sorpréndeme
-  const handleSurpriseMe = async (): Promise<void> => {
-    setSurpriseLoading(true);
-    setSurpriseError(null);
-    setSurpriseSuggestions([]);
-
-    const cityData = US_CITIES.find((c) => c.slug === selectedCitySlug);
-    const coords =
-      cityData && 'lat' in cityData && 'lng' in cityData
-        ? { lat: cityData.lat, lng: cityData.lng }
-        : undefined;
-
-    try {
-      const res = await client.surpriseMe({
-        budgetTier: surpriseBudget,
-        availableMinutes: surpriseMinutes,
-        companionType: surpriseCompanion,
-        citySlug: coords ? undefined : selectedCitySlug || undefined,
-        coordinates: coords,
-        applyPreferences: true,
-      });
-      setSurpriseSuggestions(res.suggestions);
-      if (res.suggestions.length === 0) {
-        setSurpriseError('No se encontraron sugerencias que cumplan estos criterios.');
-      }
-    } catch {
-      setSurpriseError('Ocurrió un error al generar la experiencia.');
-    } finally {
-      setSurpriseLoading(false);
-    }
-  };
-
-  // Filtrado de lugares para la pestaña favoritos
-  const displayedPlaces = useMemo(() => {
-    if (activeTab === 'favorites') {
-      return places.filter((p) => favoriteIds.has(p.id));
-    }
-    return places;
-  }, [places, favoriteIds, activeTab]);
-
-  const tripClient = useMemo(
+  const client = useMemo(
     () =>
       new ExploroApiClient({
         baseUrl: API_URL,
-        defaultHeaders: internalOverride
-          ? { 'x-exploro-internal': 'true' }
-          : undefined,
+        getAccessToken: () => token,
       }),
-    [internalOverride]
+    [token]
   );
 
-  const handleLoadTripsMobile = useCallback(async () => {
-    setTripsLoading(true);
-    setTripsError(null);
+  const [categories, setCategories] = useState<CategoryDTO[]>([]);
+  const [bootError, setBootError] = useState<string | null>(null);
+
+  const [filterValues, setFilterValues] = useState<FilterValues>(INITIAL_FILTERS);
+  const [categorySlug, setCategorySlug] = useState<string>('comida');
+  const [subcategorySlug, setSubcategorySlug] = useState<string>('');
+
+  const [places, setPlaces] = useState<PlaceCardDTO[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+
+  const [showAuth, setShowAuth] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [highlightSlug, setHighlightSlug] = useState<string | null>(null);
+
+  const [favorites, setFavorites] = useState<FavoriteItemDTO[]>([]);
+  const [collections, setCollections] = useState<CollectionDTO[]>([]);
+  const [activeCollection, setActiveCollection] = useState<CollectionDTO | null>(null);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+
+  const [activeRoute, setActiveRoute] = useState<RouteSummary | null>(null);
+  const [routeTargetName, setRouteTargetName] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+
+  const favoriteIds = useMemo(
+    () => new Set(favorites.map((f) => f.placeId)),
+    [favorites]
+  );
+
+  const requestDeviceGps = useCallback(async () => {
     try {
-      const list = await tripClient.listTrips();
-      setTrips(list);
-      if (list.length > 0 && !selectedTrip) {
-        setSelectedTrip(list[0]);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setFilterValues((prev) => ({
+        ...prev,
+        coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+        citySlug: '',
+        unbounded: false,
+      }));
+    } catch {
+      /* Conserva coordenadas actuales si el usuario deniega o falla el GPS */
+    }
+  }, []);
+
+  const loadCatalogAndGps = useCallback(() => {
+    setBootError(null);
+    client
+      .getCategories()
+      .then((cats) => {
+        setCategories(cats);
+      })
+      .catch((e: unknown) =>
+        setBootError(
+          `${t.discovery.connectionError}${e instanceof Error ? `: ${e.message}` : ''}`
+        )
+      );
+
+    void requestDeviceGps();
+  }, [client, requestDeviceGps, t.discovery.connectionError]);
+
+  useEffect(() => {
+    loadCatalogAndGps();
+  }, [loadCatalogAndGps]);
+
+  const loadPlaces = useCallback(async () => {
+    setLoading(true);
+    setDiscoveryError(null);
+    try {
+      const res = await client.discoverPlaces({
+        citySlug: filterValues.citySlug || undefined,
+        categorySlug: categorySlug || undefined,
+        subcategorySlug: subcategorySlug || undefined,
+        searchQuery: filterValues.searchQuery || undefined,
+        sortBy: filterValues.sortBy,
+        lat: filterValues.coords?.lat,
+        lng: filterValues.coords?.lng,
+        radiusKm: filterValues.unbounded ? undefined : filterValues.radiusKm,
+        applyPreferences: Boolean(user),
+        page: 1,
+        limit: 20,
+      });
+      setPlaces(res.data ?? []);
+    } catch (e: unknown) {
+      setDiscoveryError(
+        e instanceof Error ? e.message : t.discovery.connectionError
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    client,
+    filterValues.citySlug,
+    filterValues.searchQuery,
+    filterValues.sortBy,
+    filterValues.coords,
+    filterValues.unbounded,
+    filterValues.radiusKm,
+    categorySlug,
+    subcategorySlug,
+    user,
+    t.discovery.connectionError,
+  ]);
+
+  useEffect(() => {
+    void loadPlaces();
+  }, [loadPlaces]);
+
+  const refreshLibrary = useCallback(async () => {
+    if (!user) {
+      setFavorites([]);
+      setCollections([]);
+      setActiveCollection(null);
+      return;
+    }
+    try {
+      const [favs, cols] = await Promise.all([
+        client.listFavorites(),
+        client.listCollections(),
+      ]);
+      setFavorites(favs);
+      setCollections(cols);
+    } catch (e: unknown) {
+      setLibraryError(e instanceof Error ? e.message : 'Error');
+    }
+  }, [client, user]);
+
+  useEffect(() => {
+    void refreshLibrary();
+  }, [refreshLibrary]);
+
+  const handleLogin = async (email: string, password: string): Promise<void> => {
+    const session = await client.login({ email, password });
+    setToken(session.tokens.accessToken);
+    setUser(session.user);
+  };
+
+  const handleRegister = async (
+    email: string,
+    password: string,
+    displayName: string
+  ): Promise<void> => {
+    const session = await client.register({ email, password, displayName });
+    setToken(session.tokens.accessToken);
+    setUser(session.user);
+  };
+
+  const handleLogout = (): void => {
+    setToken(null);
+    setUser(null);
+    setShowLibrary(false);
+  };
+
+  const handleToggleFavorite = async (place: PlaceCardDTO): Promise<void> => {
+    if (!user) {
+      setShowAuth(true);
+      return;
+    }
+    try {
+      if (favoriteIds.has(place.id)) {
+        await client.removeFavorite(place.id);
+      } else {
+        await client.addFavorite(place.id);
       }
-    } catch (err: unknown) {
-      setTripsError(
-        err instanceof Error ? err.message : 'Error al cargar viajes'
-      );
-    } finally {
-      setTripsLoading(false);
-    }
-  }, [tripClient, selectedTrip]);
-
-  const handleGenerateAssistedMobile = async () => {
-    setTripsLoading(true);
-    setTripsError(null);
-    try {
-      const plan = await tripClient.generateAssistedPlan({
-        citySlug: 'new-york',
-        title: 'Nueva York en 1 Día (Asistido)',
-        startDate: '2026-11-20',
-        endDate: '2026-11-20',
-        budgetTier: 'MEDIUM',
-        travelStyles: ['CULTURAL'],
-        flexibilityMinutes: 15,
-      });
-      setSelectedTrip(plan);
-      setTrips((prev) => [plan, ...prev]);
-    } catch (err: unknown) {
-      setTripsError(
-        err instanceof Error ? err.message : 'Error al generar itinerario'
-      );
-    } finally {
-      setTripsLoading(false);
+      await refreshLibrary();
+    } catch (e: unknown) {
+      setLibraryError(e instanceof Error ? e.message : 'Error');
     }
   };
 
-  const handleOpenAlternativesMobile = async (item: TripItemDTO) => {
-    if (!selectedTrip) return;
-    setAltsItem(item);
-    setAltsLoading(true);
-    setAltsData(null);
-    try {
-      const res = await tripClient.getActivityAlternatives(
-        selectedTrip.id,
-        item.id,
-        15
-      );
-      setAltsData(res);
-    } catch (err: unknown) {
-      setTripsError(
-        err instanceof Error ? err.message : 'Error al obtener alternativas'
-      );
-    } finally {
-      setAltsLoading(false);
-    }
+  const handleCreateCollection = async (name: string): Promise<void> => {
+    await client.createCollection({ name, isPublic: false });
+    await refreshLibrary();
   };
 
-  const handlePreviewReorgMobile = async () => {
-    if (!selectedTrip || !modifyingItem) return;
-    try {
-      const preview = await tripClient.previewReorganization(
-        selectedTrip.id,
-        modifyingItem.id,
-        {
-          newStartTime,
-          newDurationMinutes: newDuration,
-        }
-      );
-      setReorgPreview(preview);
-    } catch (err: unknown) {
-      setTripsError(
-        err instanceof Error ? err.message : 'Error al previsualizar cambios'
-      );
+  const handleOpenCollection = async (id: string | null): Promise<void> => {
+    if (!id) {
+      setActiveCollection(null);
+      return;
     }
+    const detail = await client.getCollection(id);
+    setActiveCollection(detail);
   };
 
-  const handleApplyReorgMobile = async () => {
-    if (!selectedTrip || !modifyingItem || !reorgPreview) return;
-    try {
-      await tripClient.updateTripItem(selectedTrip.id, modifyingItem.id, {
-        startTime: newStartTime,
-        durationMinutes: newDuration,
-      });
-      if (reorgPreview.shiftedItems.length > 0) {
-        await tripClient.applyReorganization(selectedTrip.id, {
-          affectedItemIds: reorgPreview.shiftedItems.map((s) => s.itemId),
-          shiftMinutes: reorgPreview.shiftedItems[0].shiftMinutes,
+  const handleDeleteCollection = async (id: string): Promise<void> => {
+    await client.deleteCollection(id);
+    if (activeCollection?.id === id) setActiveCollection(null);
+    await refreshLibrary();
+  };
+
+  const handleRemoveFromCollection = async (
+    collectionId: string,
+    placeId: string
+  ): Promise<void> => {
+    await client.removeCollectionItem(collectionId, placeId);
+    if (activeCollection?.id === collectionId) {
+      const updated = await client.getCollection(collectionId);
+      setActiveCollection(updated);
+    }
+    await refreshLibrary();
+  };
+
+  const handleAddToCollection = async (
+    collectionId: string,
+    place: PlaceCardDTO
+  ): Promise<void> => {
+    await client.addCollectionItem(collectionId, place.id);
+    await refreshLibrary();
+  };
+
+  const handleMapSelectCoordinates = useCallback((coords: Coordinates) => {
+    setFilterValues((prev) => ({
+      ...prev,
+      coords,
+      citySlug: '',
+      unbounded: false,
+    }));
+  }, []);
+
+  const handleMapRadiusChange = useCallback((radiusKm: number) => {
+    setFilterValues((prev) => ({
+      ...prev,
+      radiusKm,
+      unbounded: false,
+    }));
+  }, []);
+
+  const handleSelectCategory = (slug: string): void => {
+    setCategorySlug(slug);
+    setSubcategorySlug('');
+  };
+
+  const focusPlace = useCallback((slug: string): void => {
+    setHighlightSlug(slug);
+  }, []);
+
+  const handleCalculateRoute = useCallback(
+    (destination: Coordinates, name: string): void => {
+      setRouteError(null);
+      const origin =
+        filterValues.coords ??
+        (places[0] ? places[0].coordinates : DEFAULT_COORDS);
+
+      client
+        .geoCalculateRoute({
+          origin,
+          destination,
+          mode: 'driving',
+        })
+        .then((route) => {
+          setActiveRoute(route);
+          setRouteTargetName(name);
+        })
+        .catch((err: unknown) => {
+          setRouteError(
+            err instanceof Error ? err.message : t.map.routeError
+          );
         });
-      }
-      const updated = await tripClient.getTripById(selectedTrip.id);
-      setSelectedTrip(updated);
-      setModifyingItem(null);
-      setReorgPreview(null);
-    } catch (err: unknown) {
-      setTripsError(
-        err instanceof Error ? err.message : 'Error al aplicar reorganización'
-      );
-    }
-  };
+    },
+    [filterValues.coords, places, client, t.map.routeError]
+  );
 
-  // Pantalla 1: Selección obligatoria de Modo de Exploración
-  if (selectedMode === null) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <View style={styles.heroBox}>
-          <Text style={styles.badge}>EE. UU. • Evidencias Verificadas</Text>
-          <Text style={styles.title}>Exploro</Text>
-          <Text style={styles.subtitle}>
-            Descubre lugares y experiencias reales sin datos inventados. Elige
-            tu modalidad para comenzar:
+  const activeCategory = categories.find((c) => c.slug === categorySlug);
+
+  const categoryList =
+    categories.length > 0
+      ? categories
+      : [
+          { id: '1', slug: 'comida', name: 'Comida', subcategories: [] },
+          { id: '2', slug: 'turismo', name: 'Turismo', subcategories: [] },
+          { id: '3', slug: 'entretenimiento', name: 'Entretenimiento', subcategories: [] },
+          { id: '4', slug: 'actividades', name: 'Actividades', subcategories: [] },
+          { id: '5', slug: 'eventos', name: 'Eventos', subcategories: [] },
+          { id: '6', slug: 'compras', name: 'Compras', subcategories: [] },
+        ];
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* HEADER MINIMALISTA ESTILO AIRBNB */}
+      <View style={styles.header}>
+        <View style={styles.headerTopRow}>
+          {/* Marca limpia */}
+          <Text style={styles.brandTitle}>
+            Exploro<Text style={styles.brandDot}>.</Text>
           </Text>
 
-          {modes.map((m) => (
+          {/* Selector discreto de idioma + Acción única de usuario */}
+          <View style={styles.headerActions}>
             <Pressable
-              key={m.mode}
-              onPress={() => handleModePress(m.mode)}
-              style={[
-                styles.modeCard,
-                !m.enabled && styles.modeCardDisabled,
-              ]}
+              onPress={() => setShowLanguageModal(true)}
+              accessibilityLabel={t.header.languageSelectorAria}
+              style={styles.langPill}
             >
-              <View style={styles.modeHeader}>
-                <Text style={styles.modeTitle}>{m.label}</Text>
-                {m.badgeText ? (
-                  <Text style={styles.comingSoonBadge}>{m.badgeText}</Text>
-                ) : null}
-              </View>
-              <Text style={styles.modeDesc}>{m.subtitle}</Text>
+              <Text style={styles.langPillText}>
+                🌐 {localeMeta.flag} {localeMeta.shortLabel} ▾
+              </Text>
             </Pressable>
-          ))}
 
-          {localNotice ? (
-            <View style={styles.noticeBox}>
-              <Text style={styles.noticeText}>{localNotice}</Text>
-            </View>
-          ) : null}
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Pantalla 2: Exploración Principal (Estoy de viaje)
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Barra superior */}
-        <View style={styles.topBar}>
-          <View>
-            <Text style={styles.headerTitle}>Exploro US</Text>
-            <Text style={styles.headerSub}>Modalidad: Estoy de viaje</Text>
-          </View>
-          <Pressable
-            onPress={() => setSelectedMode(null)}
-            style={styles.switchBtn}
-          >
-            <Text style={styles.switchBtnText}>Cambiar modo</Text>
-          </Pressable>
-        </View>
-
-        {/* Pestañas: Catálogo vs Favoritos vs Viajes + Botón Sorpréndeme */}
-        <View style={styles.tabBar}>
-          <Pressable
-            onPress={() => setActiveTab('explore')}
-            style={[styles.tabItem, activeTab === 'explore' && styles.tabItemActive]}
-          >
-            <Text
-              style={[
-                styles.tabItemText,
-                activeTab === 'explore' && styles.tabItemTextActive,
-              ]}
-            >
-              Explorar
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setActiveTab('favorites')}
-            style={[styles.tabItem, activeTab === 'favorites' && styles.tabItemActive]}
-          >
-            <Text
-              style={[
-                styles.tabItemText,
-                activeTab === 'favorites' && styles.tabItemTextActive,
-              ]}
-            >
-              Favoritos ({favoriteIds.size})
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              setActiveTab('trips');
-              void handleLoadTripsMobile();
-            }}
-            style={[styles.tabItem, activeTab === 'trips' && styles.tabItemActive]}
-          >
-            <Text
-              style={[
-                styles.tabItemText,
-                activeTab === 'trips' && styles.tabItemTextActive,
-              ]}
-            >
-              🗺️ Viajes
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setSurpriseModalVisible(true)}
-            style={styles.surpriseButton}
-          >
-            <Text style={styles.surpriseButtonText}>✨ Sorpréndeme</Text>
-          </Pressable>
-        </View>
-
-        {/* PASO 2: Selección de Categoría mediante Tarjetas (Sin campos ni scroll) */}
-        {activeTab === 'explore' && !selectedCategorySlug ? (
-          <View style={{ marginTop: 12 }}>
-            <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>
-              Paso 2 de 3 • ¿Qué deseas explorar hoy?
-            </Text>
-            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 14 }}>
-              📍 Usando tu ubicación actual • Radio automático: 5 km a la redonda • Orden: Recomendados
-            </Text>
-            <View
-              style={{
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                justifyContent: 'space-between',
-                gap: 10,
-              }}
-            >
-              {categories.map((cat) => (
+            {user ? (
+              <>
                 <Pressable
-                  key={cat.id}
-                  onPress={() => {
-                    setSelectedCategorySlug(cat.slug);
-                    setSortBy('recommended');
-                    setRadiusKm(DEFAULT_RADIUS_KM);
-                    setUnbounded(false);
-                    setShowMapFilters(false);
-                  }}
-                  style={{
-                    width: '48%',
-                    backgroundColor: '#131c31',
-                    borderRadius: 16,
-                    padding: 16,
-                    borderWidth: 1,
-                    borderColor: 'rgba(56, 189, 248, 0.3)',
-                    marginBottom: 10,
-                  }}
+                  onPress={() => setShowLibrary((v) => !v)}
+                  style={styles.savedPill}
                 >
-                  <Text style={{ fontSize: 17, fontWeight: '800', color: '#f8fafc', marginBottom: 4 }}>
-                    {cat.name}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#94a3b8' }} numberOfLines={2}>
-                    {cat.description}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#38bdf8', fontWeight: '700', marginTop: 10 }}>
-                    Ver en mapa (5 km) →
+                  <Text style={styles.savedPillText}>
+                    {t.header.saved(favorites.length)}
                   </Text>
                 </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {/* PASO 3: Barra de estado del Mapa (5 km a la redonda + Recomendados por defecto) y botón de filtros */}
-        {activeTab === 'explore' && selectedCategorySlug ? (
-          <View style={{ marginTop: 10, marginBottom: 10 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Pressable
-                onPress={() => {
-                  setSelectedCategorySlug('');
-                  setShowMapFilters(false);
-                }}
-                style={styles.categoryChip}
-              >
-                <Text style={styles.chipText}>← Categorías</Text>
-              </Pressable>
-              <Text style={{ color: '#34d399', fontSize: 12, fontWeight: '700' }}>
-                📍 Hasta {radiusKm} km • ⭐ Recomendados
-              </Text>
-              <Pressable
-                onPress={() => setShowMapFilters((v) => !v)}
-                style={[styles.categoryChip, showMapFilters && styles.categoryChipActive]}
-              >
-                <Text style={[styles.chipText, showMapFilters && styles.chipTextActive]}>
-                  🎛️ {showMapFilters ? 'Ocultar' : 'Filtros'}
-                </Text>
-              </Pressable>
-            </View>
-
-            {showMapFilters ? (
-              <View>
-                <View style={styles.searchContainer}>
-                  <TextInput
-                    placeholder="Filtrar en el mapa..."
-                    placeholderTextColor="#64748b"
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    style={styles.searchInput}
-                  />
-                  {searchQuery.length > 0 ? (
-                    <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
-                      <Text style={styles.clearSearchText}>✕</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-
-                {autocompleteSuggestions.length > 0 ? (
-                  <View style={styles.suggestionsContainer}>
-                    {autocompleteSuggestions.map((sug) => (
-                      <Pressable
-                        key={sug.id}
-                        onPress={() => {
-                          setSearchQuery(sug.title);
-                          setAutocompleteSuggestions([]);
-                        }}
-                        style={styles.suggestionItem}
-                      >
-                        <View>
-                          <Text style={styles.suggestionTitle}>{sug.title}</Text>
-                          <Text style={styles.suggestionSub}>{sug.subtitle}</Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-
-                <Text style={styles.filterLabel}>Zona de referencia (Honduras y EE. UU.):</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalScroll}
+                <Pressable
+                  onPress={() => void handleLogout()}
+                  style={styles.logoutPill}
                 >
-                  {US_CITIES.map((c) => {
-                    const active = selectedCitySlug === c.slug;
-                    return (
-                      <Pressable
-                        key={c.slug || 'all'}
-                        onPress={() => setSelectedCitySlug(c.slug)}
-                        style={[styles.cityChip, active && styles.cityChipActive]}
-                      >
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                          {c.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-
-                <View style={styles.sortRow}>
-                  <View style={styles.sortChips}>
-                    {(
-                      [
-                        ['recommended', '⭐ Recomendados'],
-                        ['distance', '📍 Distancia'],
-                        ['name', '🔤 Nombre'],
-                      ] as const
-                    ).map(([key, label]) => {
-                      const active = sortBy === key;
-                      return (
-                        <Pressable
-                          key={key}
-                          onPress={() => setSortBy(key)}
-                          style={[styles.sortChip, active && styles.sortChipActive]}
-                        >
-                          <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
-                            {label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <Pressable
-                    onPress={() => setUnbounded((prev) => !prev)}
-                    style={[styles.unboundedChip, unbounded && styles.unboundedChipActive]}
-                  >
-                    <Text style={styles.unboundedChipText}>
-                      {unbounded ? '🌐 Sin límite' : `📍 Hasta ${radiusKm} km`}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {/* Mensaje de error si la conexión falló */}
-        {errorNotice ? (
-          <View style={styles.noticeBox}>
-            <Text style={styles.noticeText}>{errorNotice}</Text>
-          </View>
-        ) : null}
-
-        {/* Lista de lugares o Vista de Viajes */}
-        {activeTab === 'trips' ? (
-          <View style={{ marginTop: 12 }}>
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-            >
-              <Text style={[styles.badge, { backgroundColor: '#0284c7' }]}>
-                🧪 Modo Interno Activo
-              </Text>
+                  <Text style={styles.logoutPillText}>
+                    {user.displayName} · {t.header.logout}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
               <Pressable
-                onPress={() => setInternalOverride((v) => !v)}
+                onPress={() => setShowAuth((v) => !v)}
+                style={styles.signInPill}
+              >
+                <Text style={styles.signInPillText}>{t.header.signIn}</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {/* BARRA HORIZONTAL DE CATEGORÍAS ESTILO AIRBNB */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesNav}
+        >
+          {categoryList.map((cat) => {
+            const isSelected = categorySlug === cat.slug;
+            const icon = CATEGORY_ICONS[cat.slug] ?? '✨';
+            const displayCatName = t.categories[cat.slug] ?? cat.name;
+            return (
+              <Pressable
+                key={cat.id}
+                onPress={() => handleSelectCategory(cat.slug)}
                 style={[
-                  styles.switchBtn,
-                  { borderColor: internalOverride ? '#10b981' : '#ef4444' },
+                  styles.categoryTabBtn,
+                  isSelected
+                    ? styles.categoryTabBtnActive
+                    : styles.categoryTabBtnInactive,
                 ]}
               >
+                <Text style={styles.categoryTabIcon}>{icon}</Text>
                 <Text
-                  style={{
-                    color: internalOverride ? '#10b981' : '#ef4444',
-                    fontSize: 11,
-                  }}
+                  style={[
+                    styles.categoryTabLabel,
+                    isSelected
+                      ? styles.categoryTabLabelActive
+                      : styles.categoryTabLabelInactive,
+                  ]}
                 >
-                  {internalOverride ? 'x-exploro-internal: ON' : 'x-exploro-internal: OFF'}
+                  {displayCatName}
                 </Text>
               </Pressable>
-            </View>
+            );
+          })}
+        </ScrollView>
+      </View>
 
+      {/* CONTENIDO PRINCIPAL */}
+      <ScrollView
+        style={styles.mainScroll}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {Boolean(notice) && (
+          <View style={styles.warnAlert}>
+            <Text style={styles.warnAlertText}>{notice}</Text>
+            <Pressable onPress={() => setNotice(null)} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>{t.discovery.close}</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {Boolean(bootError) && (
+          <View style={styles.errorAlert}>
+            <Text style={[styles.errorAlertText, { flex: 1 }]}>{bootError}</Text>
+            <Pressable onPress={loadCatalogAndGps} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>{t.discovery.retry}</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {showAuth && !user && (
+          <AuthPanel
+            onLogin={handleLogin}
+            onRegister={handleRegister}
+            onClose={() => setShowAuth(false)}
+          />
+        )}
+
+        {showLibrary && user && (
+          <LibraryPanel
+            favorites={favorites}
+            collections={collections}
+            activeCollection={activeCollection}
+            error={libraryError}
+            onCreateCollection={handleCreateCollection}
+            onOpenCollection={(id) => void handleOpenCollection(id)}
+            onDeleteCollection={(id) => void handleDeleteCollection(id)}
+            onRemoveItem={(cid, pid) => void handleRemoveFromCollection(cid, pid)}
+            onRemoveFavorite={(pid) => {
+              const found = favorites.find((f) => f.placeId === pid);
+              if (found) void handleToggleFavorite(found.place);
+            }}
+            onClose={() => setShowLibrary(false)}
+          />
+        )}
+
+        {/* Subcategorías agrupadas */}
+        {activeCategory && activeCategory.subcategories.length > 0 && (
+          <View style={styles.subcategoriesBox}>
             <Pressable
-              onPress={handleGenerateAssistedMobile}
+              onPress={() => setSubcategorySlug('')}
               style={[
-                styles.surpriseButton,
-                { marginBottom: 16, alignItems: 'center' },
+                styles.subPill,
+                subcategorySlug === ''
+                  ? styles.subPillActive
+                  : styles.subPillInactive,
               ]}
             >
-              <Text style={styles.surpriseButtonText}>
-                ✨ Generar Itinerario Asistido (NY)
+              <Text style={styles.subPillIcon}>✨</Text>
+              <Text
+                style={[
+                  styles.subPillText,
+                  subcategorySlug === ''
+                    ? styles.subPillTextActive
+                    : styles.subPillTextInactive,
+                ]}
+              >
+                {t.subcategories.all}
               </Text>
             </Pressable>
 
-            {tripsLoading ? (
-              <ActivityIndicator
-                size="large"
-                color="#38bdf8"
-                style={{ marginVertical: 32 }}
-              />
-            ) : tripsError ? (
-              <View style={styles.noticeBox}>
-                <Text style={styles.noticeText}>{tripsError}</Text>
-              </View>
-            ) : selectedTrip ? (
-              <View>
-                <Text style={styles.sectionTitle}>
-                  Mis Itinerarios ({trips.length})
-                </Text>
-                <View style={[styles.placeCard, { marginBottom: 16 }]}>
-                  <Text style={styles.placeName}>{selectedTrip.title}</Text>
-                  <Text style={styles.placeMeta}>
-                    📅 {selectedTrip.startDate} • 💰 Presupuesto:{' '}
-                    {selectedTrip.budgetTier} • ⏱️ Flexibilidad: ±
-                    {selectedTrip.flexibilityMinutes}m
-                  </Text>
-                </View>
-
-                {/* Días */}
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                  {selectedTrip.days?.map((d) => (
-                    <Pressable
-                      key={d.id}
-                      onPress={() => setSelectedDayNumber(d.dayNumber)}
-                      style={[
-                        styles.categoryChip,
-                        selectedDayNumber === d.dayNumber && styles.categoryChipActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          selectedDayNumber === d.dayNumber && styles.chipTextActive,
-                        ]}
-                      >
-                        Día {d.dayNumber}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                {/* Items del día */}
-                {selectedTrip.days
-                  ?.find((d) => d.dayNumber === selectedDayNumber)
-                  ?.items?.map((it, idx) => (
-                    <View
-                      key={it.id}
-                      style={[styles.placeCard, { padding: 12, marginBottom: 10 }]}
-                    >
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 8,
-                          }}
-                        >
-                          <View
-                            style={{
-                              backgroundColor: '#0f172a',
-                              padding: 6,
-                              borderRadius: 6,
-                            }}
-                          >
-                            <Text
-                              style={{
-                                color: '#38bdf8',
-                                fontWeight: '700',
-                                fontSize: 13,
-                              }}
-                            >
-                              {it.startTime ?? '10:00'}
-                            </Text>
-                          </View>
-                          <View>
-                            <Text
-                              style={{
-                                color: '#f8fafc',
-                                fontWeight: '700',
-                                fontSize: 14,
-                              }}
-                            >
-                              {it.customTitle ?? it.placeName ?? 'Actividad'}
-                            </Text>
-                            <Text style={{ color: '#94a3b8', fontSize: 12 }}>
-                              {it.durationMinutes} min{' '}
-                              {idx > 0 && it.transitDistanceMetersFromPrev > 0
-                                ? `• Traslado: ${(
-                                    it.transitDistanceMetersFromPrev / 1000
-                                  ).toFixed(1)} km (~${it.transitMinutesFromPrev}m)`
-                                : ''}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                        <Pressable
-                          onPress={() => void handleOpenAlternativesMobile(it)}
-                          style={[styles.switchBtn, { backgroundColor: '#1e293b' }]}
-                        >
-                          <Text style={{ color: '#38bdf8', fontSize: 11 }}>
-                            🔄 Alternativas (3 Niveles)
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => {
-                            setModifyingItem(it);
-                            setNewStartTime(it.startTime?.slice(0, 5) ?? '10:00');
-                            setNewDuration(it.durationMinutes);
-                            setReorgPreview(null);
-                          }}
-                          style={[styles.switchBtn, { backgroundColor: '#1e293b' }]}
-                        >
-                          <Text style={{ color: '#cbd5e1', fontSize: 11 }}>
-                            ⏱️ Ajustar Horario
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ))}
-              </View>
-            ) : (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No hay itinerarios registrados</Text>
-                <Text style={styles.emptySub}>
-                  Genera uno asistido para comenzar.
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          <>
-            <Text style={styles.sectionTitle}>
-              {activeTab === 'explore'
-                ? 'Recomendaciones respaldadas por evidencias'
-                : 'Mis lugares guardados'}
-            </Text>
-
-            {loading ? (
-              <ActivityIndicator size="large" color="#38bdf8" style={{ marginVertical: 32 }} />
-            ) : displayedPlaces.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>
-                  {activeTab === 'explore'
-                    ? 'No se encontraron lugares con estos filtros.'
-                    : 'Aún no has guardado ningún lugar favorito.'}
-                </Text>
-                <Text style={styles.emptySub}>
-                  {activeTab === 'explore'
-                    ? 'Prueba cambiando la ciudad o limpiando la búsqueda.'
-                    : 'Toca el ícono de corazón en cualquier tarjeta para guardarlo.'}
-                </Text>
-              </View>
-            ) : (
-              displayedPlaces.map((place, idx) => {
-                const isFav = favoriteIds.has(place.id);
-                const distFormatted = formatDistanceKm(place.distanceMeters);
-
-                return (
-                  <Pressable
-                    key={place.id}
-                    onPress={() => void handleOpenDetail(place.slug || place.id)}
-                    style={styles.placeCard}
+            {activeCategory.subcategories.map((sub) => {
+              const active = subcategorySlug === sub.slug;
+              const subDisplayName = t.subcategories[sub.slug] ?? sub.name;
+              const icon = SUBCATEGORY_ICONS[sub.slug] ?? '📍';
+              return (
+                <Pressable
+                  key={sub.id}
+                  onPress={() => setSubcategorySlug(active ? '' : sub.slug)}
+                  style={[
+                    styles.subPill,
+                    active ? styles.subPillActive : styles.subPillInactive,
+                  ]}
+                >
+                  <Text style={styles.subPillIcon}>{icon}</Text>
+                  <Text
+                    style={[
+                      styles.subPillText,
+                      active
+                        ? styles.subPillTextActive
+                        : styles.subPillTextInactive,
+                    ]}
                   >
-                    <View style={styles.placeHeader}>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.badgeRow}>
-                          <Text style={styles.placeMeta}>
-                            #{idx + 1} • {place.categoryName} • {place.cityName}
-                            {place.stateCode ? `, ${place.stateCode}` : ''}
-                          </Text>
-                          {place.isDemoData ? (
-                            <View style={styles.demoBadge}>
-                              <Text style={styles.demoBadgeText}>DEMO</Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        <Text style={styles.placeName}>{place.name}</Text>
-                      </View>
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          toggleFavorite(place.id);
-                        }}
-                        style={[styles.favBtn, isFav && styles.favBtnActive]}
-                      >
-                        <Text style={styles.favBtnText}>{isFav ? '❤️' : '🤍'}</Text>
-                      </Pressable>
-                    </View>
-
-                    <Text style={styles.placeReason} numberOfLines={3}>
-                      💡 {place.recommendationReason}
-                    </Text>
-
-                    <View style={styles.placeFooter}>
-                      <View>
-                        <Text style={styles.placePrice}>
-                          {formatVerifiedPriceRange({
-                            avgPriceMin: place.avgPriceMin,
-                            avgPriceMax: place.avgPriceMax,
-                            currencyCode: place.currencyCode,
-                            priceStatus: place.priceStatus,
-                          })}
-                          {place.priceStatus !== 'CONFIRMED' ? (
-                            <Text style={styles.unverifiedNote}> (sin verificar)</Text>
-                          ) : null}
-                        </Text>
-                        {distFormatted ? (
-                          <Text style={styles.placeDistance}>📍 a {distFormatted}</Text>
-                        ) : null}
-                      </View>
-                      <Text style={styles.placeEvidenceCount}>
-                        {place.recommendationCount} evidencia(s)
-                      </Text>
-                    </View>
-
-                    {/* Botones directos Waze y Google Maps ($0.00) */}
-                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          void Linking.openURL(
-                            buildWazeUrl(place.coordinates.lat, place.coordinates.lng)
-                          );
-                        }}
-                        style={[styles.switchBtn, { backgroundColor: 'rgba(56, 189, 248, 0.16)', borderColor: '#38bdf8' }]}
-                      >
-                        <Text style={{ color: '#38bdf8', fontSize: 12, fontWeight: '700' }}>
-                          🚗 Ir con Waze
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          void Linking.openURL(
-                            buildGoogleMapsUrl(place.coordinates.lat, place.coordinates.lng)
-                          );
-                        }}
-                        style={[styles.switchBtn, { backgroundColor: 'rgba(16, 185, 129, 0.16)', borderColor: '#10b981' }]}
-                      >
-                        <Text style={{ color: '#34d399', fontSize: 12, fontWeight: '700' }}>
-                          🗺️ Google Maps
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </Pressable>
-                );
-              })
-            )}
-          </>
+                    {subDisplayName}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         )}
+
+        {activeRoute && routeTargetName && (
+          <View style={styles.infoAlert}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoAlertText}>
+                <Text style={{ fontWeight: '800' }}>
+                  {t.map.routeLabel(routeTargetName)}
+                </Text>
+                {(activeRoute.distanceMeters / 1000).toFixed(1)} km · ~
+                {activeRoute.durationMinutes} min
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                setActiveRoute(null);
+                setRouteTargetName(null);
+              }}
+              style={styles.smallBtn}
+            >
+              <Text style={styles.smallBtnText}>{t.map.closeRoute}</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {Boolean(routeError) && (
+          <View style={styles.warnAlert}>
+            <Text style={styles.warnAlertText}>{routeError}</Text>
+          </View>
+        )}
+
+        {Boolean(discoveryError) && (
+          <View style={styles.errorAlert}>
+            <Text style={[styles.errorAlertText, { flex: 1 }]}>
+              {discoveryError}
+            </Text>
+            <Pressable onPress={() => void loadPlaces()} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>{t.discovery.retry}</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* MAPA INTERACTIVO + RECOMENDADOS */}
+        <MapView
+          places={places}
+          userLocation={filterValues.coords}
+          fallbackCenter={filterValues.coords ?? DEFAULT_COORDS}
+          activeRoute={activeRoute}
+          radiusKm={filterValues.radiusKm}
+          unbounded={filterValues.unbounded}
+          onSelectPlace={focusPlace}
+          onSelectCoordinates={handleMapSelectCoordinates}
+          onRadiusChange={handleMapRadiusChange}
+          onResetToGps={() => void requestDeviceGps()}
+        />
+
+        <View style={styles.recommendationsSection}>
+          <View style={styles.recommendationsHeader}>
+            <Text style={styles.recommendationsTitle}>
+              {loading
+                ? t.discovery.searchingNearby
+                : t.discovery.recommendedCount(places.length)}
+            </Text>
+          </View>
+
+          {loading ? (
+            <BackpackerLoader
+              message={t.discovery.scoutingZone}
+              submessage={t.discovery.scoutingSubtitle}
+            />
+          ) : !discoveryError && places.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyCardText}>
+                {t.discovery.emptyZone(filterValues.radiusKm)}
+              </Text>
+              <Pressable
+                onPress={() =>
+                  handleMapRadiusChange(Math.min(50, filterValues.radiusKm * 2))
+                }
+                style={styles.expandRadiusBtn}
+              >
+                <Text style={styles.expandRadiusBtnText}>
+                  {t.discovery.expandRadius(
+                    Math.min(50, filterValues.radiusKm * 2)
+                  )}
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.placesGrid}>
+              {places.map((place, index) => (
+                <PlaceCard
+                  key={place.id}
+                  place={place}
+                  rank={index + 1}
+                  client={client}
+                  isFavorite={favoriteIds.has(place.id)}
+                  isLoggedIn={Boolean(user)}
+                  collections={collections}
+                  highlight={highlightSlug === place.slug}
+                  onToggleFavorite={(p) => void handleToggleFavorite(p)}
+                  onAddToCollection={(cid, p) =>
+                    void handleAddToCollection(cid, p)
+                  }
+                  onRequireLogin={() => setShowAuth(true)}
+                  onCalculateRoute={handleCalculateRoute}
+                  userOrigin={
+                    filterValues.coords
+                      ? `${filterValues.coords.lat},${filterValues.coords.lng}`
+                      : null
+                  }
+                />
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
-      {/* MODAL: Sorpréndeme */}
+      {/* MODAL SELECTOR DE IDIOMA (7 IDIOMAS IGUAL QUE EN LA WEB) */}
       <Modal
-        visible={surpriseModalVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setSurpriseModalVisible(false)}
-      >
-        <SafeAreaView style={styles.container}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.topBar}>
-              <View>
-                <Text style={styles.headerTitle}>✨ Sorpréndeme</Text>
-                <Text style={styles.headerSub}>Descubrimiento aleatorio verificado</Text>
-              </View>
-              <Pressable
-                onPress={() => setSurpriseModalVisible(false)}
-                style={styles.switchBtn}
-              >
-                <Text style={styles.switchBtnText}>Cerrar</Text>
-              </Pressable>
-            </View>
-
-            {/* Presupuesto */}
-            <Text style={styles.modalFieldLabel}>Presupuesto máximo:</Text>
-            <View style={styles.budgetRow}>
-              {(
-                [
-                  ['FREE', 'Gratis'],
-                  ['LOW', '$ Económico'],
-                  ['MEDIUM', '$$ Moderado'],
-                  ['HIGH', '$$$ Alto'],
-                  ['LUXURY', '$$$$ Lujo'],
-                ] as const
-              ).map(([tier, label]) => (
-                <Pressable
-                  key={tier}
-                  onPress={() => setSurpriseBudget(tier)}
-                  style={[
-                    styles.budgetOption,
-                    surpriseBudget === tier && styles.budgetOptionActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.budgetOptionText,
-                      surpriseBudget === tier && styles.budgetOptionTextActive,
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Tiempo Disponible */}
-            <Text style={styles.modalFieldLabel}>Tiempo disponible:</Text>
-            <View style={styles.budgetRow}>
-              {[
-                { label: '1 hora', mins: 60 },
-                { label: '2 horas', mins: 120 },
-                { label: '4 horas', mins: 240 },
-                { label: 'Todo el día', mins: 480 },
-              ].map((t) => (
-                <Pressable
-                  key={t.mins}
-                  onPress={() => setSurpriseMinutes(t.mins)}
-                  style={[
-                    styles.budgetOption,
-                    surpriseMinutes === t.mins && styles.budgetOptionActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.budgetOptionText,
-                      surpriseMinutes === t.mins && styles.budgetOptionTextActive,
-                    ]}
-                  >
-                    {t.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Acompañante */}
-            <Text style={styles.modalFieldLabel}>Compañía:</Text>
-            <View style={styles.budgetRow}>
-              {(
-                [
-                  ['SOLO', 'Solo'],
-                  ['COUPLE', 'Pareja'],
-                  ['FRIENDS', 'Amigos'],
-                  ['FAMILY', 'Familia'],
-                ] as const
-              ).map(([val, label]) => (
-                <Pressable
-                  key={val}
-                  onPress={() => setSurpriseCompanion(val)}
-                  style={[
-                    styles.budgetOption,
-                    surpriseCompanion === val && styles.budgetOptionActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.budgetOptionText,
-                      surpriseCompanion === val && styles.budgetOptionTextActive,
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Botón de Generar Sorpresa */}
-            <Pressable
-              onPress={() => void handleSurpriseMe()}
-              disabled={surpriseLoading}
-              style={styles.generateButton}
-            >
-              {surpriseLoading ? (
-                <ActivityIndicator color="#0b1120" />
-              ) : (
-                <Text style={styles.generateButtonText}>🎲 Generar Sorpresa</Text>
-              )}
-            </Pressable>
-
-            {surpriseError ? (
-              <View style={styles.noticeBox}>
-                <Text style={styles.noticeText}>{surpriseError}</Text>
-              </View>
-            ) : null}
-
-            {/* Resultados de Sorpréndeme */}
-            {surpriseSuggestions.map((sug) => (
-              <View key={sug.place.id} style={styles.surpriseCard}>
-                <View style={styles.placeHeader}>
-                  <Text style={styles.placeName}>{sug.place.name}</Text>
-                  {sug.place.isDemoData ? (
-                    <View style={styles.demoBadge}>
-                      <Text style={styles.demoBadgeText}>DEMO</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.placeMeta}>
-                  {sug.place.categoryName} • {sug.place.cityName}
-                </Text>
-                <Text style={styles.placeReason}>{sug.place.recommendationReason}</Text>
-
-                <View style={styles.fitTagsRow}>
-                  <View
-                    style={[
-                      styles.fitTag,
-                      sug.budgetFit === 'CONFIRMED' ? styles.fitTagOk : styles.fitTagWarn,
-                    ]}
-                  >
-                    <Text style={styles.fitTagText}>
-                      {sug.budgetFit === 'CONFIRMED'
-                        ? '✓ Presupuesto verificado'
-                        : '⚠️ Presupuesto no confirmado'}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.fitTag,
-                      sug.timeFit === 'CONFIRMED' ? styles.fitTagOk : styles.fitTagWarn,
-                    ]}
-                  >
-                    <Text style={styles.fitTagText}>
-                      {sug.timeFit === 'CONFIRMED'
-                        ? '✓ Tiempo verificado'
-                        : '⚠️ Duración estimada'}
-                    </Text>
-                  </View>
-                  {sug.estimatedTravelMinutes !== null ? (
-                    <View style={styles.fitTag}>
-                      <Text style={styles.fitTagText}>
-                        🚗 ~{sug.estimatedTravelMinutes} min traslado
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* MODAL: Alternativas en 3 Niveles (Fase 6) */}
-      <Modal
-        visible={altsItem !== null}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setAltsItem(null)}
-      >
-        <SafeAreaView style={styles.container}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.topBar}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.headerTitle}>🔄 Alternativas</Text>
-                <Text style={styles.headerSub}>
-                  Para: {altsItem?.customTitle ?? altsItem?.placeName ?? 'Actividad'}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setAltsItem(null)}
-                style={styles.switchBtn}
-              >
-                <Text style={styles.switchBtnText}>Cerrar</Text>
-              </Pressable>
-            </View>
-
-            {altsLoading ? (
-              <ActivityIndicator
-                size="large"
-                color="#38bdf8"
-                style={{ marginVertical: 32 }}
-              />
-            ) : altsData ? (
-              <View style={{ gap: 16 }}>
-                {/* Nivel 1 */}
-                <View>
-                  <Text style={[styles.sectionTitle, { color: '#10b981' }]}>
-                    🟢 Nivel 1: Muy Similares ({altsData.verySimilar.length})
-                  </Text>
-                  <Text style={[styles.placeMeta, { marginBottom: 8 }]}>
-                    Misma categoría, cercanía geográfica (&lt; 2.5 km) y duración equivalente.
-                  </Text>
-                  {altsData.verySimilar.map((alt) => (
-                    <View
-                      key={alt.placeId}
-                      style={[
-                        styles.placeCard,
-                        { borderColor: '#10b981', borderWidth: 1, padding: 12, marginBottom: 8 },
-                      ]}
-                    >
-                      <Text style={styles.placeName}>{alt.placeName}</Text>
-                      <Text style={styles.placeMeta}>
-                        📍 {(alt.distanceMetersFromOriginal / 1000).toFixed(1)} km • ⏱️ {alt.estimatedDurationMins}m • 💰 ${alt.estimatedCost}
-                      </Text>
-                      <Text style={[styles.placeReason, { color: '#10b981', marginTop: 4 }]}>
-                        {alt.explanation}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Nivel 2 */}
-                <View>
-                  <Text style={[styles.sectionTitle, { color: '#f59e0b' }]}>
-                    🟡 Nivel 2: Experiencias Relacionadas ({altsData.relatedExperiences.length})
-                  </Text>
-                  <Text style={[styles.placeMeta, { marginBottom: 8 }]}>
-                    Experiencias complementarias en la misma zona (&lt; 6 km).
-                  </Text>
-                  {altsData.relatedExperiences.map((alt) => (
-                    <View
-                      key={alt.placeId}
-                      style={[
-                        styles.placeCard,
-                        { borderColor: '#f59e0b', borderWidth: 1, padding: 12, marginBottom: 8 },
-                      ]}
-                    >
-                      <Text style={styles.placeName}>{alt.placeName}</Text>
-                      <Text style={styles.placeMeta}>
-                        📍 {(alt.distanceMetersFromOriginal / 1000).toFixed(1)} km • ⏱️ {alt.estimatedDurationMins}m
-                      </Text>
-                      <Text style={[styles.placeReason, { color: '#f59e0b', marginTop: 4 }]}>
-                        {alt.explanation}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Nivel 3 */}
-                <View>
-                  <Text style={[styles.sectionTitle, { color: '#f97316' }]}>
-                    🟠 Nivel 3: Requiere Ajustes ({altsData.requiresAdjustments.length})
-                  </Text>
-                  <Text style={[styles.placeMeta, { marginBottom: 8 }]}>
-                    Opciones que implican mayor tiempo de viaje o reprogramación.
-                  </Text>
-                  {altsData.requiresAdjustments.slice(0, 3).map((alt) => (
-                    <View
-                      key={alt.placeId}
-                      style={[
-                        styles.placeCard,
-                        { borderColor: '#f97316', borderWidth: 1, padding: 12, marginBottom: 8 },
-                      ]}
-                    >
-                      <Text style={styles.placeName}>{alt.placeName}</Text>
-                      <Text style={styles.placeMeta}>
-                        📍 {(alt.distanceMetersFromOriginal / 1000).toFixed(1)} km
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* MODAL: Ajustar Horario y Reorganización Inteligente (Fase 6) */}
-      <Modal
-        visible={modifyingItem !== null}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setModifyingItem(null)}
-      >
-        <SafeAreaView style={styles.container}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.topBar}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.headerTitle}>⏱️ Ajustar Horario</Text>
-                <Text style={styles.headerSub}>
-                  {modifyingItem?.customTitle ?? modifyingItem?.placeName}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setModifyingItem(null)}
-                style={styles.switchBtn}
-              >
-                <Text style={styles.switchBtnText}>Cancelar</Text>
-              </Pressable>
-            </View>
-
-            <View style={[styles.placeCard, { padding: 16, gap: 12 }]}>
-              <Text style={{ color: '#cbd5e1', fontSize: 13 }}>Nueva Hora de Inicio (HH:MM):</Text>
-              <TextInput
-                value={newStartTime}
-                onChangeText={setNewStartTime}
-                style={[styles.searchInput, { paddingHorizontal: 12 }]}
-                placeholder="11:00"
-                placeholderTextColor="#64748b"
-              />
-
-              <Text style={{ color: '#cbd5e1', fontSize: 13 }}>Duración (minutos):</Text>
-              <TextInput
-                value={String(newDuration)}
-                onChangeText={(v) => setNewDuration(Number(v) || 60)}
-                keyboardType="numeric"
-                style={[styles.searchInput, { paddingHorizontal: 12 }]}
-                placeholder="60"
-                placeholderTextColor="#64748b"
-              />
-
-              <Pressable
-                onPress={handlePreviewReorgMobile}
-                style={[styles.surpriseButton, { alignItems: 'center', marginTop: 8 }]}
-              >
-                <Text style={styles.surpriseButtonText}>
-                  🔍 Calcular Impacto en Actividades Posteriores
-                </Text>
-              </Pressable>
-
-              {reorgPreview && (
-                <View
-                  style={{
-                    backgroundColor: '#0f172a',
-                    padding: 12,
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: reorgPreview.scheduleOverflowsDay ? '#ef4444' : '#38bdf8',
-                    marginTop: 8,
-                    gap: 6,
-                  }}
-                >
-                  <Text style={{ color: '#f8fafc', fontWeight: '700', fontSize: 13 }}>
-                    {reorgPreview.requiresApproval
-                      ? '⚠️ Impacto detectado en el itinerario'
-                      : '✅ Horarios compatibles'}
-                  </Text>
-                  <Text style={{ color: '#94a3b8', fontSize: 12 }}>
-                    {reorgPreview.reason}
-                  </Text>
-                  {reorgPreview.scheduleOverflowsDay && (
-                    <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>
-                      {reorgPreview.recommendationMessage}
-                    </Text>
-                  )}
-                  {reorgPreview.shiftedItems.map((sh) => (
-                    <Text key={sh.itemId} style={{ color: '#38bdf8', fontSize: 12 }}>
-                      • {sh.placeName}: {sh.originalStartTime} ➔ {sh.proposedStartTime} (+{sh.shiftMinutes}m)
-                    </Text>
-                  ))}
-
-                  <Pressable
-                    onPress={handleApplyReorgMobile}
-                    style={[styles.surpriseButton, { backgroundColor: '#10b981', marginTop: 12, alignItems: 'center' }]}
-                  >
-                    <Text style={styles.surpriseButtonText}>
-                      ✅ Confirmar y Aplicar Cambios
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* MODAL: Detalle de Lugar y Cálculo de Ruta */}
-      <Modal
-        visible={selectedPlaceId !== null}
+        visible={showLanguageModal}
+        transparent
         animationType="fade"
-        transparent={false}
-        onRequestClose={handleCloseDetail}
+        onRequestClose={() => setShowLanguageModal(false)}
       >
-        <SafeAreaView style={styles.container}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.topBar}>
-              <Text style={styles.headerTitle}>Detalle del Lugar</Text>
-              <Pressable onPress={handleCloseDetail} style={styles.switchBtn}>
-                <Text style={styles.switchBtnText}>✕ Cerrar</Text>
-              </Pressable>
-            </View>
-
-            {loadingDetail || !placeDetail ? (
-              <ActivityIndicator size="large" color="#38bdf8" style={{ marginTop: 40 }} />
-            ) : (
-              <View>
-                <View style={styles.badgeRow}>
-                  <Text style={styles.placeMeta}>
-                    {placeDetail.categoryName} • {placeDetail.cityName}
-                    {placeDetail.stateCode ? `, ${placeDetail.stateCode}` : ''}
-                  </Text>
-                  {placeDetail.isDemoData ? (
-                    <View style={styles.demoBadge}>
-                      <Text style={styles.demoBadgeText}>DEMO</Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                <Text style={styles.detailTitle}>{placeDetail.name}</Text>
-                {placeDetail.addressText ? (
-                  <Text style={styles.detailAddress}>{placeDetail.addressText}</Text>
-                ) : null}
-
-                {/* BOTÓN: Calcular Ruta (Fase 3) */}
-                <View style={styles.routeButtonsRow}>
-                  <Pressable
-                    disabled={routeLoading}
-                    onPress={() => void handleCalculateRoute('driving')}
-                    style={styles.routeBtn}
+        <Pressable
+          style={styles.langModalBackdrop}
+          onPress={() => setShowLanguageModal(false)}
+        >
+          <View style={styles.langModalCard}>
+            <Text style={styles.langModalTitle}>
+              🌐 {t.header.languageSelectorAria}
+            </Text>
+            {supportedLocales.map((l) => {
+              const active = l.code === locale;
+              return (
+                <Pressable
+                  key={l.code}
+                  onPress={() => {
+                    setLocale(l.code as SupportedLocale);
+                    setShowLanguageModal(false);
+                  }}
+                  style={[
+                    styles.langOptionBtn,
+                    active && styles.langOptionBtnActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.langOptionText,
+                      active && styles.langOptionTextActive,
+                    ]}
                   >
-                    <Text style={styles.routeBtnText}>🚗 Cómo llegar (Auto)</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={routeLoading}
-                    onPress={() => void handleCalculateRoute('walking')}
-                    style={styles.routeBtn}
-                  >
-                    <Text style={styles.routeBtnText}>🚶 A pie</Text>
-                  </Pressable>
-                </View>
-
-                {routeLoading ? (
-                  <ActivityIndicator color="#38bdf8" style={{ marginVertical: 12 }} />
-                ) : null}
-
-                {routeInfo ? (
-                  <View style={styles.routeResultCard}>
-                    <Text style={styles.routeResultTitle}>
-                      📍 Trayecto calculado ({routeInfo.mode === 'driving' ? 'Auto' : 'A pie'}):
-                    </Text>
-                    <Text style={styles.routeResultMeta}>
-                      Distancia: {routeInfo.distanceMiles} mi • Tiempo estimado: ~{routeInfo.durationMinutes} min
-                    </Text>
-                    <View style={styles.stepsList}>
-                      {routeInfo.steps.map((st, i) => (
-                        <Text key={i} style={styles.stepItem}>
-                          {i + 1}. {st.instruction} (~{Math.round(st.distanceMeters)} m)
-                        </Text>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
-
-                {/* Recomendación Explicable y Aspectos Verificados (Fase 4) */}
-                <View style={styles.aiCard}>
-                  <View style={styles.aiCardHeader}>
-                    <Text style={styles.aiCardTitle}>🧠 Recomendación Explicable</Text>
-                    <Text style={styles.aiScoreBadge}>
-                      {recSummary ? `${Math.round(recSummary.overallScore)}/100` : `${Math.round(placeDetail.scoreSummary.overallScore)}/100`}
-                    </Text>
-                  </View>
-                  <Text style={styles.aiExplanationText}>
-                    {recSummary?.explanation || placeDetail.recommendationReason}
+                    {l.flag} {l.label}
                   </Text>
-
-                  {/* Chips de Aspectos Positivos */}
-                  {recSummary && recSummary.topPositiveAspects.length > 0 ? (
-                    <View style={styles.aspectsRow}>
-                      {recSummary.topPositiveAspects.map((asp) => (
-                        <View key={asp.aspect} style={styles.positiveAspectChip}>
-                          <Text style={styles.positiveAspectText}>
-                            ✨ {asp.aspect} {asp.mentionsCount > 1 ? `(${asp.mentionsCount})` : ''}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  {/* Chips de Advertencias */}
-                  {recSummary && recSummary.topNegativeAspects.length > 0 ? (
-                    <View style={styles.aspectsRow}>
-                      {recSummary.topNegativeAspects.map((asp) => (
-                        <View key={asp.aspect} style={styles.negativeAspectChip}>
-                          <Text style={styles.negativeAspectText}>⚠️ {asp.aspect}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  <View style={styles.aiCardFooter}>
-                    <Text style={styles.aiAuditText}>
-                      {recSummary?.factCheckPassed
-                        ? '✅ Respaldado por evidencias'
-                        : '⚠️ Información en verificación'}
-                    </Text>
-                    <Text style={styles.aiCostText}>Costo IA: $0.00</Text>
-                  </View>
-                </View>
-
-                {/* FASE 5: Experiencia Propia y Verificación de Visita */}
-                <View style={styles.experienceCard}>
-                  <View style={styles.experienceCardHeader}>
-                    <Text style={styles.experienceCardTitle}>🚀 Experiencia Propia</Text>
-                    {activeActivity?.isVerifiedVisit ? (
-                      <View style={styles.verifiedVisitBadge}>
-                        <Text style={styles.verifiedVisitBadgeText}>✓ Visita Verificada</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {!activeActivity ? (
-                    <Pressable
-                      onPress={() => void handleStartActivity()}
-                      style={styles.startActivityBtn}
-                    >
-                      <Text style={styles.startActivityBtnText}>
-                        ▶ Comenzar actividad en este lugar
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <View style={styles.activeActivityBox}>
-                      <Text style={styles.activeActivityTitle}>
-                        📍 En curso: {activeActivity.activityTitle}
-                      </Text>
-                      <Text style={styles.activeActivitySub}>
-                        Estado: {activeActivity.isVerifiedVisit ? 'Verificada con GPS' : 'Sin verificar presencia'}
-                      </Text>
-
-                      <View style={styles.activityActionsRow}>
-                        {!activeActivity.isVerifiedVisit ? (
-                          <Pressable
-                            onPress={() => void handleVerifyProximity()}
-                            style={styles.verifyGpsBtn}
-                          >
-                            <Text style={styles.verifyGpsBtnText}>📍 Verificar visita (GPS)</Text>
-                          </Pressable>
-                        ) : null}
-                        <Pressable
-                          onPress={() => setShowFeedbackModal(true)}
-                          style={styles.finishExperienceBtn}
-                        >
-                          <Text style={styles.finishExperienceBtnText}>✅ Finalizar y Calificar</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  )}
-
-                  {experienceNotice ? (
-                    <Text style={styles.experienceNoticeText}>{experienceNotice}</Text>
-                  ) : null}
-                </View>
-
-                {/* FASE 5: Modal de Reseña Corta Adaptada */}
-                {showFeedbackModal ? (
-                  <View style={styles.feedbackFormBox}>
-                    <Text style={styles.feedbackTitle}>
-                      {placeDetail.categorySlug === 'comida'
-                        ? '🍽️ Reseña rápida de Restaurante'
-                        : '🌄 Reseña rápida de Turismo'}
-                    </Text>
-                    <Text style={styles.feedbackSubtitle}>
-                      Sin formularios largos: comparte lo esencial para enriquecer el ranking.
-                    </Text>
-
-                    <Text style={styles.feedbackLabel}>Calificación general:</Text>
-                    <View style={styles.aspectsRow}>
-                      {[1, 2, 3, 4, 5].map((val) => (
-                        <Pressable
-                          key={val}
-                          onPress={() => setFeedbackRating(val)}
-                          style={[
-                            styles.positiveAspectChip,
-                            feedbackRating === val && { backgroundColor: '#38bdf8' },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.positiveAspectText,
-                              feedbackRating === val && { color: '#0b1120', fontWeight: '700' },
-                            ]}
-                          >
-                            ⭐ {val}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    <Text style={styles.feedbackLabel}>
-                      {placeDetail.categorySlug === 'comida' ? 'Plato recomendado:' : 'Consejo clave para otros:'}
-                    </Text>
-                    <TextInput
-                      style={styles.feedbackInput}
-                      placeholder={
-                        placeDetail.categorySlug === 'comida'
-                          ? 'Ej. Burrata Pizza Slice'
-                          : 'Ej. Llevar abrigo para el atardecer'
-                      }
-                      placeholderTextColor="#64748b"
-                      value={feedbackRecommended}
-                      onChangeText={setFeedbackRecommended}
-                    />
-
-                    <Text style={styles.feedbackLabel}>Comentario breve:</Text>
-                    <TextInput
-                      style={[styles.feedbackInput, { height: 60 }]}
-                      placeholder="¿Qué tal la experiencia?"
-                      placeholderTextColor="#64748b"
-                      multiline
-                      value={feedbackComment}
-                      onChangeText={setFeedbackComment}
-                    />
-
-                    <View style={styles.feedbackActionsRow}>
-                      <Pressable
-                        onPress={() => setShowFeedbackModal(false)}
-                        style={styles.feedbackCancelBtn}
-                      >
-                        <Text style={styles.feedbackCancelText}>Cancelar</Text>
-                      </Pressable>
-                      <Pressable
-                        disabled={feedbackSubmitting}
-                        onPress={() => void handleCompleteExperience()}
-                        style={styles.feedbackSubmitBtn}
-                      >
-                        <Text style={styles.feedbackSubmitText}>
-                          {feedbackSubmitting ? 'Enviando…' : 'Publicar'}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
-
-                {/* FASE 5: Opiniones de la Comunidad Exploro */}
-                {placeReviews.length > 0 ? (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>
-                      Opiniones de la Comunidad ({placeReviews.length})
-                    </Text>
-                    {placeReviews.map((rev) => (
-                      <View key={rev.id} style={styles.communityReviewItem}>
-                        <View style={styles.reviewHeaderRow}>
-                          <Text style={styles.reviewAuthor}>{rev.userName || 'Viajero Exploro'}</Text>
-                          <View
-                            style={
-                              rev.isVerifiedVisit
-                                ? styles.reviewVerifiedChip
-                                : styles.reviewNativeChip
-                            }
-                          >
-                            <Text style={styles.reviewChipText}>
-                              {rev.isVerifiedVisit ? '✓ Visita Verificada' : 'Opinión Nativa'}
-                            </Text>
-                          </View>
-                        </View>
-                        {rev.recommendedItem ? (
-                          <Text style={styles.reviewRecommendedText}>
-                            ✨ Recomendado: {rev.recommendedItem}
-                          </Text>
-                        ) : null}
-                        {rev.comment ? (
-                          <Text style={styles.reviewCommentText}>"{rev.comment}"</Text>
-                        ) : null}
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-
-                {/* Actividades disponibles */}
-                {placeDetail.activities.length > 0 ? (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>
-                      Actividades disponibles ({placeDetail.activities.length})
-                    </Text>
-                    {placeDetail.activities.map((act) => (
-                      <View key={act.id} style={styles.activityItem}>
-                        <Text style={styles.activityTitle}>{act.title}</Text>
-                        <Text style={styles.activityDesc}>{act.description}</Text>
-                        <Text style={styles.activityMeta}>
-                          {act.estimatedDurationMins !== null
-                            ? `Duración estimada: ${act.estimatedDurationMins} min`
-                            : 'Duración sin datos'}
-                          {act.estimatedCost !== null
-                            ? ` • Costo: ~$${act.estimatedCost}`
-                            : ' • Costo no especificado'}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-
-                {/* Evidencias registradas auditables */}
-                {placeDetail.evidences.length > 0 ? (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>
-                      Evidencias auditables ({placeDetail.evidences.length})
-                    </Text>
-                    {placeDetail.evidences.map((ev) => (
-                      <View key={ev.id} style={styles.evidenceItem}>
-                        <Text style={styles.evidenceSnippet}>"{ev.extractedSnippet}"</Text>
-                        <Text style={styles.evidenceMeta}>
-                          {ev.sourceName} • Confianza: {Math.round(ev.confidenceScore * 100)}%
-                          {ev.publishedAt ? ` • ${new Date(ev.publishedAt).toLocaleDateString()}` : ''}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
+                  {active && <Text style={styles.langCheck}>✓</Text>}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
 }
 
+export default function App(): React.JSX.Element {
+  return (
+    <LanguageProvider>
+      <ExploroMobileHome />
+    </LanguageProvider>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#0b1120',
+    backgroundColor: '#ffffff',
   },
-  heroBox: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
+  header: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
-  badge: {
-    color: '#34d399',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: '#f8fafc',
-    fontSize: 36,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: '#94a3b8',
-    fontSize: 15,
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  modeCard: {
-    backgroundColor: '#131c31',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#38bdf8',
-  },
-  modeCardDisabled: {
-    borderColor: '#334155',
-    opacity: 0.72,
-  },
-  modeHeader: {
+  headerTopRow: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 10,
   },
-  modeTitle: {
-    color: '#f8fafc',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  comingSoonBadge: {
-    color: '#fbbf24',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  modeDesc: {
-    color: '#94a3b8',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  noticeBox: {
-    marginVertical: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#451a03',
-  },
-  noticeText: {
-    color: '#fde68a',
-    fontSize: 13,
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerTitle: {
-    color: '#f8fafc',
+  brandTitle: {
     fontSize: 22,
     fontWeight: '800',
+    letterSpacing: -0.6,
+    color: '#0f172a',
   },
-  headerSub: {
-    color: '#38bdf8',
-    fontSize: 13,
+  brandDot: {
+    color: '#10B981',
   },
-  switchBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  switchBtnText: {
-    color: '#cbd5e1',
-    fontSize: 12,
-  },
-  tabBar: {
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    gap: 7,
   },
-  tabItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#1e293b',
-  },
-  tabItemActive: {
-    backgroundColor: '#0284c7',
-  },
-  tabItemText: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  tabItemTextActive: {
-    color: '#f8fafc',
-  },
-  surpriseButton: {
-    marginLeft: 'auto',
-    backgroundColor: '#8b5cf6',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  surpriseButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#131c31',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#1e293b',
-  },
-  searchInput: {
-    flex: 1,
-    height: 42,
-    color: '#f8fafc',
-    fontSize: 14,
-  },
-  clearSearchBtn: {
-    padding: 6,
-  },
-  clearSearchText: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  suggestionsContainer: {
-    backgroundColor: '#131c31',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1e293b',
-  },
-  suggestionTitle: {
-    color: '#f8fafc',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  suggestionSub: {
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  suggestionBadge: {
-    color: '#38bdf8',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  filterLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  horizontalScroll: {
-    marginBottom: 14,
-  },
-  cityChip: {
-    backgroundColor: '#131c31',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#1e293b',
-  },
-  cityChipActive: {
-    borderColor: '#38bdf8',
-    backgroundColor: '#0369a1',
-  },
-  categoryChip: {
-    backgroundColor: '#131c31',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#1e293b',
-  },
-  categoryChipActive: {
-    borderColor: '#38bdf8',
-    backgroundColor: '#1e3a8a',
-  },
-  chipText: {
-    color: '#cbd5e1',
-    fontSize: 13,
-  },
-  chipTextActive: {
-    color: '#f8fafc',
-    fontWeight: '700',
-  },
-  sortRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  sortChips: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  sortChip: {
+  langPill: {
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor: '#131c31',
+    borderRadius: 999,
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#1e293b',
+    borderColor: '#e2e8f0',
   },
-  sortChipActive: {
-    borderColor: '#38bdf8',
-    backgroundColor: '#0c4a6e',
-  },
-  sortChipText: {
-    color: '#94a3b8',
+  langPillText: {
     fontSize: 12,
+    fontWeight: '800',
+    color: '#0f172a',
   },
-  sortChipTextActive: {
-    color: '#38bdf8',
-    fontWeight: '700',
-  },
-  unboundedChip: {
+  savedPill: {
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor: '#131c31',
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#e2e8f0',
   },
-  unboundedChipActive: {
-    borderColor: '#10b981',
-    backgroundColor: '#064e3b',
-  },
-  unboundedChipText: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  sectionTitle: {
-    color: '#f8fafc',
-    fontSize: 16,
+  savedPillText: {
+    fontSize: 12.5,
     fontWeight: '700',
-    marginBottom: 12,
-    marginTop: 4,
+    color: '#0f172a',
   },
-  emptyBox: {
-    padding: 32,
-    alignItems: 'center',
-    backgroundColor: '#131c31',
-    borderRadius: 12,
-    marginVertical: 16,
-  },
-  emptyTitle: {
-    color: '#f8fafc',
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  emptySub: {
-    color: '#94a3b8',
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  placeCard: {
-    backgroundColor: '#131c31',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
+  logoutPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#1e293b',
+    borderColor: '#e2e8f0',
   },
-  placeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 6,
+  logoutPillText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#64748b',
   },
-  badgeRow: {
+  signInPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  signInPillText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  categoriesNav: {
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    gap: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
   },
-  placeMeta: {
-    color: '#38bdf8',
-    fontSize: 12,
-    fontWeight: '700',
+  categoryTabBtn: {
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: 5,
+    paddingHorizontal: 4,
+    paddingBottom: 9,
+    borderBottomWidth: 2.5,
   },
-  demoBadge: {
-    backgroundColor: '#f59e0b',
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+  categoryTabBtnActive: {
+    borderBottomColor: '#0f172a',
+    opacity: 1,
   },
-  demoBadgeText: {
-    color: '#000000',
-    fontSize: 9,
+  categoryTabBtnInactive: {
+    borderBottomColor: 'transparent',
+    opacity: 0.78,
+  },
+  categoryTabIcon: {
+    fontSize: 20,
+  },
+  categoryTabLabel: {
+    fontSize: 12.8,
+  },
+  categoryTabLabelActive: {
+    color: '#0f172a',
     fontWeight: '800',
   },
-  placeName: {
-    color: '#f8fafc',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  favBtn: {
-    padding: 6,
-  },
-  favBtnActive: {
-    transform: [{ scale: 1.1 }],
-  },
-  favBtnText: {
-    fontSize: 18,
-  },
-  placeReason: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  placeFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: '#1e293b',
-    paddingTop: 10,
-  },
-  placePrice: {
-    color: '#94a3b8',
-    fontSize: 12,
-  },
-  unverifiedNote: {
-    color: '#f59e0b',
-    fontSize: 11,
-    fontStyle: 'italic',
-  },
-  placeDistance: {
-    color: '#60a5fa',
-    fontSize: 12,
-    marginTop: 2,
+  categoryTabLabelInactive: {
+    color: '#64748b',
     fontWeight: '600',
   },
-  placeEvidenceCount: {
-    color: '#34d399',
-    fontSize: 12,
-    fontWeight: '700',
+  mainScroll: {
+    flex: 1,
+    backgroundColor: '#ffffff',
   },
-  // Modal styles
-  modalFieldLabel: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 8,
-    textTransform: 'uppercase',
+  mainContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 40,
+    gap: 14,
   },
-  budgetRow: {
+  subcategoriesBox: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
+    alignItems: 'center',
+    gap: 7,
   },
-  budgetOption: {
+  subPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 13,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  subPillActive: {
+    borderWidth: 1.5,
+    borderColor: '#0f172a',
+    backgroundColor: '#0f172a',
+  },
+  subPillInactive: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+  },
+  subPillIcon: {
+    fontSize: 12.5,
+  },
+  subPillText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  subPillTextActive: {
+    color: '#ffffff',
+  },
+  subPillTextInactive: {
+    color: '#334155',
+  },
+  warnAlert: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  warnAlertText: {
+    color: '#b45309',
+    fontSize: 13.5,
+    fontWeight: '600',
+    flex: 1,
+  },
+  errorAlert: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#fecdd3',
+  },
+  errorAlertText: {
+    color: '#be123c',
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  infoAlert: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  infoAlertText: {
+    color: '#0369a1',
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  smallBtn: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#dddddd',
+    borderBottomWidth: 3,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  smallBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  recommendationsSection: {
+    gap: 10,
+  },
+  recommendationsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  recommendationsTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  emptyCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#ebebeb',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    gap: 14,
+  },
+  emptyCardText: {
+    color: '#475569',
+    fontSize: 14.5,
+    textAlign: 'center',
+  },
+  expandRadiusBtn: {
+    backgroundColor: '#10b981',
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    borderBottomWidth: 3.5,
+    borderBottomColor: '#047857',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  expandRadiusBtnText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  placesGrid: {
+    gap: 18,
+  },
+  langModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  langModalCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 18,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 5,
+  },
+  langModalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 6,
+  },
+  langOptionBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: '#131c31',
-    borderWidth: 1,
-    borderColor: '#1e293b',
-  },
-  budgetOptionActive: {
-    backgroundColor: '#7c3aed',
-    borderColor: '#a78bfa',
-  },
-  budgetOptionText: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  budgetOptionTextActive: {
-    color: '#ffffff',
-  },
-  generateButton: {
-    backgroundColor: '#8b5cf6',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  generateButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  surpriseCard: {
-    backgroundColor: '#131c31',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#7c3aed',
+    backgroundColor: '#f8fafc',
   },
-  fitTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
+  langOptionBtnActive: {
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1.5,
+    borderColor: '#10b981',
   },
-  fitTag: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: '#1e293b',
+  langOptionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
   },
-  fitTagOk: {
-    backgroundColor: '#064e3b',
-  },
-  fitTagWarn: {
-    backgroundColor: '#78350f',
-  },
-  fitTagText: {
-    color: '#f8fafc',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  detailTitle: {
-    color: '#f8fafc',
-    fontSize: 24,
+  langOptionTextActive: {
+    color: '#047857',
     fontWeight: '800',
-    marginBottom: 4,
   },
-  detailAddress: {
-    color: '#94a3b8',
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  routeButtonsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  routeBtn: {
-    flex: 1,
-    backgroundColor: '#0369a1',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  routeBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  routeResultCard: {
-    backgroundColor: '#0c4a6e',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#38bdf8',
-  },
-  routeResultTitle: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  routeResultMeta: {
-    color: '#7dd3fc',
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  stepsList: {
-    gap: 4,
-  },
-  stepItem: {
-    color: '#e2e8f0',
-    fontSize: 11,
-  },
-  detailSection: {
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#1e293b',
-  },
-  detailSectionTitle: {
-    color: '#38bdf8',
+  langCheck: {
+    color: '#10b981',
+    fontWeight: '800',
     fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  activityItem: {
-    backgroundColor: '#131c31',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  activityTitle: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  activityDesc: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  activityMeta: {
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  evidenceItem: {
-    backgroundColor: '#131c31',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#34d399',
-  },
-  evidenceSnippet: {
-    color: '#f8fafc',
-    fontSize: 13,
-    fontStyle: 'italic',
-    marginBottom: 4,
-  },
-  evidenceMeta: {
-    color: '#64748b',
-    fontSize: 11,
-  },
-  aiCard: {
-    backgroundColor: '#131c31',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#1e3a5f',
-    padding: 14,
-    marginTop: 14,
-    gap: 8,
-  },
-  aiCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  aiCardTitle: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  aiScoreBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.2)',
-    color: '#38bdf8',
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    fontWeight: '700',
-    fontSize: 12,
-    overflow: 'hidden',
-  },
-  aiExplanationText: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  aspectsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  positiveAspectChip: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-  },
-  positiveAspectText: {
-    color: '#6ee7b7',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  negativeAspectChip: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-  },
-  negativeAspectText: {
-    color: '#fca5a5',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  aiCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#1e293b',
-    paddingTop: 6,
-    marginTop: 4,
-  },
-  aiAuditText: {
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  aiCostText: {
-    color: '#64748b',
-    fontSize: 11,
-  },
-  // FASE 5: Estilos de Experiencias Propias
-  experienceCard: {
-    backgroundColor: '#0f172a',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#38bdf8',
-    padding: 14,
-    marginTop: 14,
-    gap: 8,
-  },
-  experienceCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  experienceCardTitle: {
-    color: '#38bdf8',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  verifiedVisitBadge: {
-    backgroundColor: '#10b981',
-    borderRadius: 12,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  verifiedVisitBadgeText: {
-    color: '#0f172a',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  startActivityBtn: {
-    backgroundColor: '#0284c7',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  startActivityBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  activeActivityBox: {
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-    borderRadius: 8,
-    padding: 10,
-    gap: 6,
-  },
-  activeActivityTitle: {
-    color: '#f8fafc',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  activeActivitySub: {
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  activityActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  verifyGpsBtn: {
-    backgroundColor: '#334155',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
-  verifyGpsBtnText: {
-    color: '#38bdf8',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  finishExperienceBtn: {
-    backgroundColor: '#10b981',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
-  finishExperienceBtnText: {
-    color: '#0f172a',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  experienceNoticeText: {
-    color: '#38bdf8',
-    fontSize: 11,
-    fontStyle: 'italic',
-  },
-  feedbackFormBox: {
-    backgroundColor: '#131c31',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#475569',
-    padding: 12,
-    marginTop: 10,
-    gap: 6,
-  },
-  feedbackTitle: {
-    color: '#f8fafc',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  feedbackSubtitle: {
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  feedbackLabel: {
-    color: '#cbd5e1',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  feedbackInput: {
-    backgroundColor: '#0b1120',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 6,
-    color: '#f8fafc',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 12,
-  },
-  feedbackActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 6,
-  },
-  feedbackCancelBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  feedbackCancelText: {
-    color: '#94a3b8',
-    fontSize: 12,
-  },
-  feedbackSubmitBtn: {
-    backgroundColor: '#0284c7',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-  },
-  feedbackSubmitText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  communityReviewItem: {
-    backgroundColor: '#131c31',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-    gap: 4,
-  },
-  reviewHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  reviewAuthor: {
-    color: '#f8fafc',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  reviewVerifiedChip: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  reviewNativeChip: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  reviewChipText: {
-    color: '#34d399',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  reviewRecommendedText: {
-    color: '#38bdf8',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  reviewCommentText: {
-    color: '#cbd5e1',
-    fontSize: 11,
-    fontStyle: 'italic',
   },
 });

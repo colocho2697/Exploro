@@ -120,6 +120,19 @@ function resolveExploroCategorySlug(
   if (!primaryType) return requestedCategorySlug;
   const t = primaryType.toLowerCase();
 
+  // 1. Hoteles y Hospedaje pertenecen a 'turismo' (evita que hoteles desplacen restaurantes en comida)
+  if (
+    t.includes('hotel') ||
+    t.includes('lodging') ||
+    t.includes('resort') ||
+    t.includes('motel') ||
+    t.includes('bed_and_breakfast') ||
+    t.includes('guest_house') ||
+    t.includes('hostel')
+  ) {
+    return 'turismo';
+  }
+
   if (
     t.includes('restaurant') ||
     t.includes('cafe') ||
@@ -431,22 +444,33 @@ export class GooglePlacesLiveService {
           countryIso = (comp.shortText?.toUpperCase() || countryIso).slice(0, 3);
           countryName = (comp.longText || countryName).slice(0, 115);
         }
-        if (
-          comp.types?.includes('locality') ||
-          comp.types?.includes('postal_town') ||
-          comp.types?.includes('sublocality_level_1') ||
-          comp.types?.includes('administrative_area_level_2')
-        ) {
-          if (cityName === 'Ciudad' && comp.longText) {
-            cityName = comp.longText.slice(0, 115);
-          }
-        }
         if (comp.types?.includes('administrative_area_level_1')) {
           stateCode = comp.shortText ? comp.shortText.slice(0, 80) : null;
-          if (cityName === 'Ciudad' && comp.longText) {
-            cityName = comp.longText.slice(0, 115);
-          }
         }
+      }
+
+      // Prioridad jerárquica para el nombre de ciudad:
+      // 1) Locality / postal_town (ej. Tegucigalpa)
+      // 2) Administrative area level 2 (municipio / distrito)
+      // 3) Sublocality / Colonia (ej. Florencia Norte)
+      const localityComp = gp.addressComponents.find(
+        (c: any) => c.types?.includes('locality') || c.types?.includes('postal_town')
+      );
+      const admin2Comp = gp.addressComponents.find((c: any) =>
+        c.types?.includes('administrative_area_level_2')
+      );
+      const sublocalComp = gp.addressComponents.find(
+        (c: any) =>
+          c.types?.includes('sublocality_level_1') ||
+          c.types?.includes('sublocality')
+      );
+
+      if (localityComp?.longText) {
+        cityName = localityComp.longText.slice(0, 115);
+      } else if (admin2Comp?.longText) {
+        cityName = admin2Comp.longText.slice(0, 115);
+      } else if (sublocalComp?.longText) {
+        cityName = sublocalComp.longText.slice(0, 115);
       }
     }
 
