@@ -1,0 +1,130 @@
+name: exploro-prod
+
+services:
+  postgres:
+    build:
+      context: infrastructure/docker
+      dockerfile: Dockerfile.postgis
+    container_name: exploro-prod-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-exploro_prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Requerido en producción}
+      POSTGRES_DB: ${POSTGRES_DB:-exploro_prod_db}
+    volumes:
+      - exploro_prod_pg_data:/var/lib/postgresql/data
+      - ./infrastructure/database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-exploro_prod} -d ${POSTGRES_DB:-exploro_prod_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  redis:
+    image: redis:7-alpine
+    container_name: exploro-prod-redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - exploro_prod_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    build:
+      context: infrastructure/docker
+      dockerfile: Dockerfile.minio
+    container_name: exploro-prod-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?Requerido en producción}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?Requerido en producción}
+    volumes:
+      - exploro_prod_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  ai-engine:
+    build:
+      context: services/ai-engine
+      dockerfile: Dockerfile
+    container_name: exploro-prod-ai-engine
+    restart: always
+    environment:
+      AI_ENGINE_ENV: production
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Requerido}
+      LOCAL_OLLAMA_URL: ${LOCAL_OLLAMA_URL:-http://host.docker.internal:11434}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.api
+    container_name: exploro-prod-api
+    restart: always
+    ports:
+      - "${API_PORT:-4000}:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      API_PORT: 4000
+      API_PREFIX: ${API_PREFIX:-api/v1}
+      DATABASE_URL: postgres://${POSTGRES_USER:-exploro_prod}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-exploro_prod_db}
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      AI_ENGINE_URL: http://ai-engine:8000
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      JWT_SECRET: ${JWT_SECRET:-exploro_prod_jwt_super_secret_key_32_chars}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://10.60.4.42:3000,http://localhost:3000}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-engine:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://10.60.4.42:4000/api/v1}
+        NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-AIzaSyC-nH4VgbG66zwEXNme017vPrRh20Sa40U}
+    container_name: exploro-prod-web
+    restart: always
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://10.60.4.42:4000/api/v1}
+    depends_on:
+      - api
+
+volumes:
+  exploro_prod_pg_data:
+  exploro_prod_redis_data:
+  exploro_prod_minio_data:
