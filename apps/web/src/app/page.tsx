@@ -22,7 +22,7 @@ import { SupportedLocale, useLanguage } from '../i18n';
 const MapView = dynamic(() => import('../components/MapView'), {
   ssr: false,
   loading: () => <div className="map-box" aria-busy="true" />,
-});
+}) as React.ComponentType<any>;
 
 /** Coordenadas iniciales de respaldo antes de que responda el GPS del navegador */
 const DEFAULT_COORDS: Coordinates = { lat: 14.0885, lng: -87.1815 };
