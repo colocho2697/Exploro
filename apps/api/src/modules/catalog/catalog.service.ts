@@ -576,6 +576,13 @@ export class CatalogService {
       verifiedExplanation: row.ai_explanation_es,
       evidenceCount,
     });
+    const provider = (process.env.PLACES_PROVIDER || 'foursquare').toLowerCase();
+    const isGoogle = provider === 'google' || provider === 'hybrid';
+    const safeImageUrl =
+      row.image_url && (!row.image_url.includes('places.googleapis.com') || isGoogle)
+        ? row.image_url
+        : null;
+
     return {
       id: row.id,
       slug: row.slug,
@@ -591,7 +598,7 @@ export class CatalogService {
       coordinates: { lat: Number(row.lat), lng: Number(row.lng) },
       distanceMeters:
         row.distance_meters !== null ? Number(row.distance_meters) : null,
-      imageUrl: row.image_url,
+      imageUrl: safeImageUrl,
       priceTier: row.price_tier,
       avgPriceMin: row.avg_price_min !== null ? Number(row.avg_price_min) : null,
       avgPriceMax: row.avg_price_max !== null ? Number(row.avg_price_max) : null,

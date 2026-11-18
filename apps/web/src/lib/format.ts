@@ -725,11 +725,19 @@ export function getPlacePhotoDetails(
     }));
   }
 
-  // 5. Fallback ilustrativo
+  // 5. Fallback ilustrativo (Sanitizado para nunca emitir URLs de Google si no está permitido)
   const fallback =
     CATEGORY_DEFAULT_GALLERIES[place.categorySlug] ??
     CATEGORY_DEFAULT_GALLERIES.comida!;
-  const urls = place.imageUrl ? [place.imageUrl, ...fallback.slice(0, 3)] : fallback;
+  const rawUrl = place.imageUrl;
+  const isGoogleUrl =
+    typeof rawUrl === 'string' && rawUrl.includes('places.googleapis.com');
+  const safeImageUrl =
+    rawUrl && (!isGoogleUrl || isGoogleAllowed) ? rawUrl : null;
+
+  const urls = safeImageUrl
+    ? [safeImageUrl, ...fallback.slice(0, 3)]
+    : fallback;
   return urls.map((url) => ({
     url,
     authorName: 'Fotografía referencial de la especialidad',

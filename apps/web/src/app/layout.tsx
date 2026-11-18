@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: 'Exploro — Descubrimiento Inteligente Basado en Evidencias',
   description:
     'Descubre lugares, comida, actividades y experiencias reales en cualquier lugar del mundo respaldadas por evidencias verificables.',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
