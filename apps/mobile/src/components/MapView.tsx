@@ -55,37 +55,85 @@ export function MapView({
     const query = searchCityQuery.trim();
     if (!query || searchingCity) return;
     setSearchingCity(true);
+
+    const applyFoundCoordinates = (coords: Coordinates) => {
+      onSelectCoordinates?.(coords);
+      setSearchCityQuery('');
+    };
+
     try {
-      const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
-          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
-        },
-        body: JSON.stringify({
-          textQuery: query,
-          maxResultCount: 1,
-          languageCode: locale,
-        }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as {
-          places?: Array<{
-            location?: { latitude: number; longitude: number };
-          }>;
+      // 1. OpenStreetMap Nominatim: Geocodificación global a costo cero ($0.00)
+      const osmRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (osmRes.ok) {
+        const osmData = (await osmRes.json()) as Array<{ lat: string; lon: string }>;
+        if (osmData.length > 0 && osmData[0]?.lat && osmData[0]?.lon) {
+          applyFoundCoordinates({
+            lat: parseFloat(osmData[0].lat),
+            lng: parseFloat(osmData[0].lon),
+          });
+          return;
+        }
+      }
+
+      // 2. Foursquare Places Search API: Búsqueda comercial directa
+      const fsqApiKey =
+        process.env.EXPO_PUBLIC_FOURSQUARE_API_KEY ||
+        '5MRFYO1STFOMOG4IRIWQK11DVXH1NPVSM532QMKYZMRPEIBL';
+      const fsqRes = await fetch(
+        `https://places-api.foursquare.com/places/search?query=${encodeURIComponent(query)}&limit=1`,
+        {
+          headers: {
+            Authorization: `Bearer ${fsqApiKey}`,
+            'X-Places-Api-Version': '2025-06-17',
+            Accept: 'application/json',
+          },
+        }
+      );
+      if (fsqRes.ok) {
+        const fsqData = (await fsqRes.json()) as {
+          results?: Array<{ latitude: number; longitude: number }>;
         };
-        const p = data.places?.[0];
-        if (
-          p?.location?.latitude !== undefined &&
-          p?.location?.longitude !== undefined
-        ) {
-          const coords: Coordinates = {
-            lat: p.location.latitude,
-            lng: p.location.longitude,
+        const p = fsqData.results?.[0];
+        if (p?.latitude !== undefined && p?.longitude !== undefined) {
+          applyFoundCoordinates({ lat: p.latitude, lng: p.longitude });
+          return;
+        }
+      }
+
+      // 3. Fallback a Google solo si EXPO_PUBLIC_PLACES_PROVIDER === 'google'
+      if (process.env.EXPO_PUBLIC_PLACES_PROVIDER === 'google') {
+        const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+            'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+          },
+          body: JSON.stringify({
+            textQuery: query,
+            maxResultCount: 1,
+            languageCode: locale,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            places?: Array<{
+              location?: { latitude: number; longitude: number };
+            }>;
           };
-          onSelectCoordinates?.(coords);
-          setSearchCityQuery('');
+          const p = data.places?.[0];
+          if (
+            p?.location?.latitude !== undefined &&
+            p?.location?.longitude !== undefined
+          ) {
+            applyFoundCoordinates({
+              lat: p.location.latitude,
+              lng: p.location.longitude,
+            });
+          }
         }
       }
     } catch {
